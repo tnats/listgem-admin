@@ -1,6 +1,16 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import client from '../api/client';
 
+/** Decode a single claim from a JWT without a library. */
+function parseJwtClaim(token, claim) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload[claim];
+  } catch {
+    return undefined;
+  }
+}
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -13,10 +23,13 @@ export function AuthProvider({ children }) {
     const { data } = await client.post('/auth/login', { email, password });
     const { token, user: userData } = data;
 
-    if (!userData.is_admin) {
+    // Check is_admin from response body OR JWT payload
+    const isAdmin = userData.is_admin || parseJwtClaim(token, 'is_admin');
+    if (!isAdmin) {
       throw new Error('Access denied. Admin privileges required.');
     }
 
+    userData.is_admin = true;
     sessionStorage.setItem('token', token);
     sessionStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
