@@ -84,3 +84,20 @@ export function useQueueStats() {
     refetchInterval: 15_000,
   });
 }
+
+// --- Seeding ---
+export function useSeedStatus() {
+  return useQuery({
+    queryKey: ['admin', 'seed', 'status'],
+    queryFn: () => client.get('/admin/seed/registry/status').then(r => r.data),
+    staleTime: 30_000,
+  });
+}
+
+export function useSeedHistory(limit = 20) {
+  return useQuery({
+    queryKey: ['admin', 'seed', 'history', limit],
+    queryFn: () => client.get('/admin/seed/registry/history', { params: { limit } }).then(r => r.data),
+    staleTime: 15_000,
+  });
+}
