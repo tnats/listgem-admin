@@ -80,7 +80,7 @@ export function useModerationStats() {
 export function useQueueStats() {
   return useQuery({
     queryKey: ['ingestion', 'queue-stats'],
-    queryFn: () => client.get('/ingestion/queue-stats').then(r => r.data),
+    queryFn: () => client.get('/queue-stats').then(r => r.data),
     refetchInterval: 15_000,
   });
 }
