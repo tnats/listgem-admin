@@ -85,6 +85,24 @@ export function useQueueStats() {
   });
 }
 
+// --- Users ---
+export function useAdminUsers({ search = '', limit = 20, offset = 0 } = {}) {
+  return useQuery({
+    queryKey: ['admin', 'users', search, limit, offset],
+    queryFn: () => client.get('/admin/users', { params: { search, limit, offset } }).then(r => r.data),
+    staleTime: 30_000,
+  });
+}
+
+// --- Featured ---
+export function useFeaturedList() {
+  return useQuery({
+    queryKey: ['feed', 'featured'],
+    queryFn: () => client.get('/feed/featured').then(r => r.data),
+    staleTime: 30_000,
+  });
+}
+
 // --- Seeding ---
 export function useSeedStatus() {
   return useQuery({

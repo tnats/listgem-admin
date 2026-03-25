@@ -6,6 +6,15 @@ const COLORS = {
   running: 'bg-blue-100 text-blue-700',
   completed: 'bg-green-100 text-green-700',
   failed: 'bg-red-100 text-red-700',
+  admin: 'bg-purple-100 text-purple-700',
+  moderator: 'bg-blue-100 text-blue-700',
+  reviewing: 'bg-blue-100 text-blue-700',
+  resolved: 'bg-green-100 text-green-700',
+  dismissed: 'bg-gray-100 text-gray-500',
+  low: 'bg-gray-100 text-gray-600',
+  medium: 'bg-yellow-100 text-yellow-700',
+  high: 'bg-orange-100 text-orange-700',
+  critical: 'bg-red-100 text-red-700',
 };
 
 export default function StatusBadge({ status }) {
