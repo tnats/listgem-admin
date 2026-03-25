@@ -103,6 +103,42 @@ export function useFeaturedList() {
   });
 }
 
+// --- User Analytics ---
+export function useUserAnalytics() {
+  return useQuery({
+    queryKey: ['admin', 'analytics', 'users'],
+    queryFn: () => client.get('/admin/analytics/users').then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
+// --- Consensus ---
+export function useConsensusAnalytics() {
+  return useQuery({
+    queryKey: ['admin', 'analytics', 'consensus'],
+    queryFn: () => client.get('/admin/analytics/consensus').then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
+// --- Audit ---
+export function useAuditLog({ limit = 50, offset = 0, actionType = '' } = {}) {
+  return useQuery({
+    queryKey: ['admin', 'audit-log', limit, offset, actionType],
+    queryFn: () => client.get('/admin/audit-log', { params: { limit, offset, action_type: actionType || undefined } }).then(r => r.data),
+    staleTime: 15_000,
+  });
+}
+
+// --- System ---
+export function useSystemStatus() {
+  return useQuery({
+    queryKey: ['admin', 'system-status'],
+    queryFn: () => client.get('/admin/system/status').then(r => r.data),
+    staleTime: 30_000,
+  });
+}
+
 // --- Quality ---
 export function useQualityByType() {
   return useQuery({
