@@ -103,6 +103,41 @@ export function useFeaturedList() {
   });
 }
 
+// --- Quality ---
+export function useQualityByType() {
+  return useQuery({
+    queryKey: ['metrics', 'quality-by-type'],
+    queryFn: () => client.get('/metrics/quality-by-type').then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
+export function useImageAnalytics() {
+  return useQuery({
+    queryKey: ['admin', 'image-analytics'],
+    queryFn: () => client.get('/admin/analytics/images').then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
+// --- Resolution ---
+export function useResolutionMetrics() {
+  return useQuery({
+    queryKey: ['metrics', 'resolution'],
+    queryFn: () => client.get('/metrics/resolution').then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
+// --- Type Rules ---
+export function useTypeRules() {
+  return useQuery({
+    queryKey: ['admin', 'type-rules'],
+    queryFn: () => client.get('/admin/type-rules').then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
 // --- Seeding ---
 export function useSeedStatus() {
   return useQuery({
