@@ -5,14 +5,17 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const SOURCES = [
   { value: 'all', label: 'All Sources' },
-  { value: 'tmdb', label: 'TMDB (Movies + TV)' },
+  { value: 'tmdb', label: 'TMDB (Movies + TV + People)' },
   { value: 'spotify', label: 'Spotify (Songs + Artists + Albums)' },
   { value: 'googlebooks', label: 'Google Books' },
+  { value: 'openlibrary', label: 'OpenLibrary (Books)' },
+  { value: 'steam', label: 'Steam (Video Games)' },
+  { value: 'wikidata', label: 'Wikidata (Restaurants, Landmarks, etc.)' },
 ];
 
 export default function SeedRunner({ onComplete }) {
   const [source, setSource] = useState('all');
-  const [moviePages, setMoviePages] = useState(50);
+  const [moviePages, setMoviePages] = useState(200);
   const [tvPages, setTvPages] = useState(25);
   const [dryRun, setDryRun] = useState(false);
   const [running, setRunning] = useState(false);
