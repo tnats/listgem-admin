@@ -103,6 +103,24 @@ export function useFeaturedList() {
   });
 }
 
+// --- APIs ---
+export function useApiStatus() {
+  return useQuery({
+    queryKey: ['admin', 'apis'],
+    queryFn: () => client.get('/admin/apis').then(r => r.data),
+    staleTime: 30_000,
+  });
+}
+
+export function useApiUsage(name, period = '24h') {
+  return useQuery({
+    queryKey: ['admin', 'apis', name, 'usage', period],
+    queryFn: () => client.get(`/admin/apis/${name}/usage`, { params: { period } }).then(r => r.data),
+    staleTime: 30_000,
+    enabled: !!name,
+  });
+}
+
 // --- User Analytics ---
 export function useUserAnalytics() {
   return useQuery({

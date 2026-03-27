@@ -19,6 +19,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/worker', label: 'Worker Health' },
       { to: '/pipeline', label: 'Pipeline Monitor' },
+      { to: '/apis', label: 'APIs' },
     ],
   },
   {
