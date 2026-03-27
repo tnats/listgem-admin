@@ -128,6 +128,11 @@ export default function ApisPage() {
                     Docs
                   </a>
                 )}
+                {api.dashboard && (
+                  <a href={api.dashboard} target="_blank" rel="noreferrer" className="text-indigo-500 hover:underline">
+                    Dashboard
+                  </a>
+                )}
               </div>
 
               {/* Status */}
