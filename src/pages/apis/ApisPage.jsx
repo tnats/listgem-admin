@@ -82,9 +82,11 @@ export default function ApisPage() {
       <div className="grid grid-cols-2 gap-4">
         {apis.map(api => {
           const ping = pingResults[api.name];
-          const pingStatus = ping?.status || (api.configured ? 'unknown' : 'not_configured');
+          // Use manual ping result, fall back to auto-health check
+          const pingStatus = ping?.status || api.health_status || (api.configured ? 'unknown' : 'not_configured');
           const borderColor = STATUS_COLORS[pingStatus] || STATUS_COLORS.unknown;
           const dotColor = DOT_COLORS[pingStatus] || DOT_COLORS.unknown;
+          const rl = api.rate_limit_live;
           const isExpanded = expanded === api.name;
 
           return (
@@ -116,6 +118,11 @@ export default function ApisPage() {
               <div className="text-xs text-gray-500 mb-2">{api.purpose}</div>
               <div className="flex items-center gap-3 text-xs text-gray-400 mb-2">
                 <span>Rate: {api.rate_limit}</span>
+                {rl && rl.remaining && (
+                  <span className={`font-medium ${parseInt(rl.remaining) < parseInt(rl.limit) * 0.1 ? 'text-red-500' : 'text-green-600'}`}>
+                    {rl.remaining}/{rl.limit} remaining
+                  </span>
+                )}
                 {api.docs && (
                   <a href={api.docs} target="_blank" rel="noreferrer" className="text-indigo-500 hover:underline">
                     Docs
@@ -159,6 +166,13 @@ export default function ApisPage() {
                   {api.last_call && (
                     <div className="text-[10px] text-gray-300 mt-1">
                       Last call: {new Date(api.last_call).toLocaleString()}
+                    </div>
+                  )}
+
+                  {/* Auto-health status */}
+                  {api.health_checked_at && !ping && (
+                    <div className="text-[10px] text-gray-300 mt-1">
+                      Auto-check: {api.health_status} ({api.health_response_ms}ms) — {new Date(api.health_checked_at).toLocaleTimeString()}
                     </div>
                   )}
 
