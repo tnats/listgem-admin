@@ -192,6 +192,15 @@ export function useTypeRules() {
   });
 }
 
+// --- Email ---
+export function useEmailTemplates() {
+  return useQuery({
+    queryKey: ['admin', 'email', 'templates'],
+    queryFn: () => client.get('/admin/email/templates').then(r => r.data),
+    staleTime: 300_000,
+  });
+}
+
 // --- Seeding ---
 export function useSeedStatus() {
   return useQuery({

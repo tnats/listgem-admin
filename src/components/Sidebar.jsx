@@ -20,6 +20,7 @@ const NAV_SECTIONS = [
       { to: '/worker', label: 'Worker Health' },
       { to: '/pipeline', label: 'Pipeline Monitor' },
       { to: '/apis', label: 'APIs' },
+      { to: '/emails', label: 'Email Templates' },
     ],
   },
   {

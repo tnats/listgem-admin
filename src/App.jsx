@@ -12,6 +12,7 @@ import QualityPage from './pages/quality/QualityPage';
 import PipelinePage from './pages/pipeline/PipelinePage';
 import SettingsPage from './pages/settings/SettingsPage';
 import ApisPage from './pages/apis/ApisPage';
+import EmailsPage from './pages/emails/EmailsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,6 +44,7 @@ export default function App() {
               <Route path="quality" element={<QualityPage />} />
               <Route path="pipeline" element={<PipelinePage />} />
               <Route path="apis" element={<ApisPage />} />
+              <Route path="emails" element={<EmailsPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Routes>
