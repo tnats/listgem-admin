@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import client from './client';
 
 // --- Admin ---
@@ -215,5 +215,21 @@ export function useSeedHistory(limit = 20) {
     queryKey: ['admin', 'seed', 'history', limit],
     queryFn: () => client.get('/admin/seed/registry/history', { params: { limit } }).then(r => r.data),
     staleTime: 15_000,
+  });
+}
+
+// --- Golden-set labeling (#404) ---
+export function useCandidatePairs({ limit = 25 } = {}) {
+  return useQuery({
+    queryKey: ['er', 'candidate-pairs', limit],
+    queryFn: () => client.get('/admin/er/candidate-pairs', { params: { limit } }).then(r => r.data),
+    staleTime: 5 * 60_000,
+    retry: false, // fail fast so the page falls back to the seeded sample
+  });
+}
+
+export function useSaveGoldenLabel() {
+  return useMutation({
+    mutationFn: (label) => client.post('/admin/er/golden-labels', label).then(r => r.data),
   });
 }

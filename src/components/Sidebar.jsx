@@ -12,6 +12,7 @@ const NAV_SECTIONS = [
     label: 'Registry',
     items: [
       { to: '/seeding', label: 'Seeding' },
+      { to: '/labeling', label: 'Golden-Set Labeling' },
     ],
   },
   {
