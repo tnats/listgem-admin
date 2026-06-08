@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import client from './client';
 
 // --- Admin ---
@@ -216,4 +216,52 @@ export function useSeedHistory(limit = 20) {
     queryFn: () => client.get('/admin/seed/registry/history', { params: { limit } }).then(r => r.data),
     staleTime: 15_000,
   });
+}
+
+// --- Entity browser / Works (#405) ---
+export function useWorks({ limit = 50, search = '' } = {}) {
+  return useQuery({
+    queryKey: ['works', 'list', limit, search],
+    queryFn: () => client.get('/works', { params: { limit, q: search || undefined } }).then(r => r.data),
+    staleTime: 60_000,
+    retry: false, // fall back to the seeded sample when the endpoint isn't reachable
+  });
+}
+
+export function useWork(workId) {
+  return useQuery({
+    queryKey: ['works', 'detail', workId],
+    queryFn: () => client.get(`/works/${workId}`).then(r => r.data),
+    enabled: !!workId,
+    retry: false,
+  });
+}
+
+export function useErQueue(status = 'pending') {
+  return useQuery({
+    queryKey: ['works', 'er-queue', status],
+    queryFn: () => client.get('/admin/works/er-queue', { params: { status } }).then(r => r.data),
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export function useWorkMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['works'] });
+  return {
+    merge: useMutation({ mutationFn: (body) => client.post('/admin/works/merge', body).then(r => r.data), onSuccess: invalidate }),
+    split: useMutation({ mutationFn: ({ workId, ...body }) => client.post(`/admin/works/${workId}/split`, body).then(r => r.data), onSuccess: invalidate }),
+    setPrimary: useMutation({ mutationFn: ({ workId, ...body }) => client.patch(`/admin/works/${workId}/primary`, body).then(r => r.data), onSuccess: invalidate }),
+    dissolve: useMutation({ mutationFn: (workId) => client.delete(`/admin/works/${workId}`).then(r => r.data), onSuccess: invalidate }),
+  };
+}
+
+export function useErQueueMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['works', 'er-queue'] });
+  return {
+    approve: useMutation({ mutationFn: (id) => client.post(`/admin/works/er-queue/${id}/approve`).then(r => r.data), onSuccess: invalidate }),
+    reject: useMutation({ mutationFn: (id) => client.post(`/admin/works/er-queue/${id}/reject`).then(r => r.data), onSuccess: invalidate }),
+  };
 }

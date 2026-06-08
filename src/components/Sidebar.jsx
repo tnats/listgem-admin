@@ -12,6 +12,8 @@ const NAV_SECTIONS = [
     label: 'Registry',
     items: [
       { to: '/seeding', label: 'Seeding' },
+      { to: '/entities', label: 'Entity Browser' },
+      { to: '/er-queue', label: 'ER Review Queue' },
     ],
   },
   {
