@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import client from './client';
 
 // --- Admin ---
@@ -215,5 +215,23 @@ export function useSeedHistory(limit = 20) {
     queryKey: ['admin', 'seed', 'history', limit],
     queryFn: () => client.get('/admin/seed/registry/history', { params: { limit } }).then(r => r.data),
     staleTime: 15_000,
+  });
+}
+
+// --- Extraction triage (#407) ---
+export function useLowQualityThings({ limit = 200, minQuality = 0.5 } = {}) {
+  return useQuery({
+    queryKey: ['metrics', 'low-quality-things', limit, minQuality],
+    queryFn: () => client.get('/metrics/low-quality-things', { params: { limit, minQuality } }).then(r => r.data),
+    staleTime: 60_000,
+    retry: false, // fall back to the seeded sample when unreachable
+  });
+}
+
+export function useReEnrich() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (thingId) => client.post(`/admin/re-enrich/${thingId}`).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['metrics', 'low-quality-things'] }),
   });
 }

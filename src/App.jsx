@@ -13,6 +13,7 @@ import PipelinePage from './pages/pipeline/PipelinePage';
 import SettingsPage from './pages/settings/SettingsPage';
 import ApisPage from './pages/apis/ApisPage';
 import EmailsPage from './pages/emails/EmailsPage';
+import TriagePage from './pages/triage/TriagePage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +43,7 @@ export default function App() {
               <Route path="worker" element={<WorkerPage />} />
               <Route path="moderation" element={<ModerationPage />} />
               <Route path="quality" element={<QualityPage />} />
+              <Route path="triage" element={<TriagePage />} />
               <Route path="pipeline" element={<PipelinePage />} />
               <Route path="apis" element={<ApisPage />} />
               <Route path="emails" element={<EmailsPage />} />
