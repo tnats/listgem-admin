@@ -217,3 +217,14 @@ export function useSeedHistory(limit = 20) {
     staleTime: 15_000,
   });
 }
+
+// --- Search-quality inspector (#406) ---
+export function useHybridSearch(query, limit = 20) {
+  return useQuery({
+    queryKey: ['search', 'hybrid', query, limit],
+    queryFn: () => client.get('/search/hybrid', { params: { q: query, limit } }).then(r => r.data),
+    enabled: !!query,
+    retry: false,
+    staleTime: 60_000,
+  });
+}
