@@ -18,6 +18,7 @@ import LabelingPage from './pages/labeling/LabelingPage';
 import EntityBrowserPage from './pages/entities/EntityBrowserPage';
 import ErQueuePage from './pages/entities/ErQueuePage';
 import TriagePage from './pages/triage/TriagePage';
+import SearchQualityPage from './pages/search-quality/SearchQualityPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,6 +53,7 @@ export default function App() {
               <Route path="entities" element={<EntityBrowserPage />} />
               <Route path="er-queue" element={<ErQueuePage />} />
               <Route path="triage" element={<TriagePage />} />
+              <Route path="search-quality" element={<SearchQualityPage />} />
               <Route path="pipeline" element={<PipelinePage />} />
               <Route path="apis" element={<ApisPage />} />
               <Route path="emails" element={<EmailsPage />} />

@@ -323,3 +323,14 @@ export function useReEnrich() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['metrics', 'low-quality-things'] }),
   });
 }
+
+// --- Search-quality inspector (#406) ---
+export function useHybridSearch(query, limit = 20) {
+  return useQuery({
+    queryKey: ['search', 'hybrid', query, limit],
+    queryFn: () => client.get('/search/hybrid', { params: { q: query, limit } }).then(r => r.data),
+    enabled: !!query,
+    retry: false,
+    staleTime: 60_000,
+  });
+}

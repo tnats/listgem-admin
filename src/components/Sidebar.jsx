@@ -33,6 +33,7 @@ const NAV_SECTIONS = [
       { to: '/moderation', label: 'Moderation' },
       { to: '/quality', label: 'Quality Metrics' },
       { to: '/triage', label: 'Extraction Triage' },
+      { to: '/search-quality', label: 'Search Quality' },
     ],
   },
   {
