@@ -226,6 +226,15 @@ export function useEmailTemplates() {
   });
 }
 
+// --- Image Quality ---
+export function useImageQuality() {
+  return useQuery({
+    queryKey: ['admin', 'image-quality'],
+    queryFn: () => client.get('/admin/analytics/image-quality').then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
 // --- Seeding ---
 export function useSeedStatus() {
   return useQuery({

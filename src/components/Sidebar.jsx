@@ -12,6 +12,7 @@ const NAV_SECTIONS = [
     label: 'Registry',
     items: [
       { to: '/seeding', label: 'Seeding' },
+      { to: '/registry-metrics', label: 'Resolution Metrics' },
       { to: '/scorecard', label: 'ER/KG Scorecard' },
       { to: '/labeling', label: 'Golden-Set Labeling' },
       { to: '/entities', label: 'Entity Browser' },
@@ -32,6 +33,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/moderation', label: 'Moderation' },
       { to: '/quality', label: 'Quality Metrics' },
+      { to: '/image-quality', label: 'Image Quality' },
       { to: '/triage', label: 'Extraction Triage' },
       { to: '/search-quality', label: 'Search Quality' },
     ],

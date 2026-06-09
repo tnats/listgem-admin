@@ -13,6 +13,8 @@ import PipelinePage from './pages/pipeline/PipelinePage';
 import SettingsPage from './pages/settings/SettingsPage';
 import ApisPage from './pages/apis/ApisPage';
 import EmailsPage from './pages/emails/EmailsPage';
+import ImageQualityPage from './pages/image-quality/ImageQualityPage';
+import RegistryMetricsPage from './pages/registry-metrics/RegistryMetricsPage';
 import ScorecardPage from './pages/scorecard/ScorecardPage';
 import LabelingPage from './pages/labeling/LabelingPage';
 import EntityBrowserPage from './pages/entities/EntityBrowserPage';
@@ -48,6 +50,8 @@ export default function App() {
               <Route path="worker" element={<WorkerPage />} />
               <Route path="moderation" element={<ModerationPage />} />
               <Route path="quality" element={<QualityPage />} />
+              <Route path="image-quality" element={<ImageQualityPage />} />
+              <Route path="registry-metrics" element={<RegistryMetricsPage />} />
               <Route path="scorecard" element={<ScorecardPage />} />
               <Route path="labeling" element={<LabelingPage />} />
               <Route path="entities" element={<EntityBrowserPage />} />
