@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import PageHeader from '../../components/PageHeader';
 import StatusBadge from '../../components/StatusBadge';
 import { useEmailTemplates } from '../../api/hooks';
@@ -6,7 +6,7 @@ import client from '../../api/client';
 
 export default function EmailsPage() {
   const { data: templateData, isLoading: templatesLoading } = useEmailTemplates();
-  const templates = templateData?.templates || [];
+  const templates = useMemo(() => templateData?.templates || [], [templateData]);
 
   const [selected, setSelected] = useState('');
   const [fields, setFields] = useState({});

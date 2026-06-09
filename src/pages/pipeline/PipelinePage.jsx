@@ -2,13 +2,12 @@ import { useState } from 'react';
 import PageHeader from '../../components/PageHeader';
 import StatCard from '../../components/StatCard';
 import StatusBadge from '../../components/StatusBadge';
-import { useCrawlAnalytics, useRegistrySearch, useResolutionMetrics, useTypeRules, useQueueStats } from '../../api/hooks';
+import { useCrawlAnalytics, useRegistrySearch, useTypeRules, useQueueStats } from '../../api/hooks';
 import client from '../../api/client';
 
 export default function PipelinePage() {
   const { data: crawls } = useCrawlAnalytics();
   const { data: registry } = useRegistrySearch();
-  const { data: resolution } = useResolutionMetrics();
   const { data: typeRulesData } = useTypeRules();
   const { data: queue } = useQueueStats();
 
@@ -21,10 +20,6 @@ export default function PipelinePage() {
   const crawlDaily = crawls?.daily || [];
   const crawlDomains = crawls?.domains || [];
   const stages = registry?.stage_breakdown || [];
-  const timing = registry?.timing || [];
-  const typeBreakdown = registry?.type_breakdown || [];
-  const resolutionByMethod = resolution?.by_method || [];
-  const resolutionByPipeline = resolution?.by_pipeline || [];
   const typeRules = typeRulesData?.rules || [];
 
   const byStatus = crawlSummary.byStatus || [];

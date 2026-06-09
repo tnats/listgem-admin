@@ -19,7 +19,7 @@ export default function SeedRunner({ onComplete }) {
   const [tvPages, setTvPages] = useState(25);
   const [dryRun, setDryRun] = useState(false);
   const [running, setRunning] = useState(false);
-  const [runId, setRunId] = useState(null);
+  const [, setRunId] = useState(null);
   const [logs, setLogs] = useState([]);
   const [error, setError] = useState('');
   const logEndRef = useRef(null);
