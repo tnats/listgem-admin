@@ -13,6 +13,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/seeding', label: 'Seeding' },
       { to: '/scorecard', label: 'ER/KG Scorecard' },
+      { to: '/labeling', label: 'Golden-Set Labeling' },
     ],
   },
   {
