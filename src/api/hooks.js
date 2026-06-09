@@ -183,6 +183,40 @@ export function useResolutionMetrics() {
   });
 }
 
+// --- ER / KG scorecard (epic #395) ---
+export function useDeduplicationEffectiveness() {
+  return useQuery({
+    queryKey: ['metrics', 'deduplication-effectiveness'],
+    queryFn: () => client.get('/metrics/deduplication/effectiveness').then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
+export function useQualityTrends() {
+  return useQuery({
+    queryKey: ['metrics', 'quality-trends'],
+    queryFn: () => client.get('/metrics/quality-trends').then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
+export function useLowQualityThings({ limit = 50, threshold = 0.5 } = {}) {
+  return useQuery({
+    queryKey: ['metrics', 'low-quality-things', limit, threshold],
+    queryFn: () =>
+      client.get('/metrics/low-quality-things', { params: { limit, threshold } }).then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
+export function useWorkRollup() {
+  return useQuery({
+    queryKey: ['metrics', 'work-rollup'],
+    queryFn: () => client.get('/metrics/work-rollup').then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
 // --- Type Rules ---
 export function useTypeRules() {
   return useQuery({
