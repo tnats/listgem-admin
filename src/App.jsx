@@ -15,6 +15,8 @@ import ApisPage from './pages/apis/ApisPage';
 import EmailsPage from './pages/emails/EmailsPage';
 import ScorecardPage from './pages/scorecard/ScorecardPage';
 import LabelingPage from './pages/labeling/LabelingPage';
+import EntityBrowserPage from './pages/entities/EntityBrowserPage';
+import ErQueuePage from './pages/entities/ErQueuePage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -46,6 +48,8 @@ export default function App() {
               <Route path="quality" element={<QualityPage />} />
               <Route path="scorecard" element={<ScorecardPage />} />
               <Route path="labeling" element={<LabelingPage />} />
+              <Route path="entities" element={<EntityBrowserPage />} />
+              <Route path="er-queue" element={<ErQueuePage />} />
               <Route path="pipeline" element={<PipelinePage />} />
               <Route path="apis" element={<ApisPage />} />
               <Route path="emails" element={<EmailsPage />} />

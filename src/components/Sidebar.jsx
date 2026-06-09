@@ -14,6 +14,8 @@ const NAV_SECTIONS = [
       { to: '/seeding', label: 'Seeding' },
       { to: '/scorecard', label: 'ER/KG Scorecard' },
       { to: '/labeling', label: 'Golden-Set Labeling' },
+      { to: '/entities', label: 'Entity Browser' },
+      { to: '/er-queue', label: 'ER Review Queue' },
     ],
   },
   {
