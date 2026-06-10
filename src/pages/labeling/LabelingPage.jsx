@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import PageHeader from '../../components/PageHeader';
 import { useCandidatePairs, useSaveGoldenLabel } from '../../api/hooks';
 import { useAuth } from '../../auth/AuthContext';
@@ -87,28 +87,50 @@ export default function LabelingPage() {
   const { user } = useAuth();
   const query = useCandidatePairs();
   const saveLabel = useSaveGoldenLabel();
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
 
-  const livePairs = query.data?.pairs;
+  // Pull the whole pool so every pair is reachable — incl. the diverse
+  // `random`/`different` tail that sorts last (the ≥100 + mix-of-types goal).
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const livePairs = query.data?.pages?.flatMap(p => p.pairs || []);
   const usingSample = !livePairs || livePairs.length === 0;
-  const pairs = usingSample ? MOCK_PAIRS : livePairs;
+  const allPairs = usingSample ? MOCK_PAIRS : livePairs;
+  const total = usingSample ? MOCK_PAIRS.length : (query.data?.pages?.[0]?.total ?? allPairs.length);
+  const reasonCounts = allPairs.reduce((a, p) => ({ ...a, [p.reason]: (a[p.reason] || 0) + 1 }), {});
+
+  const [reasonFilter, setReasonFilter] = useState('');
+  const pairs = reasonFilter ? allPairs.filter(p => p.reason === reasonFilter) : allPairs;
 
   const [index, setIndex] = useState(0);
   const [labels, setLabels] = useState(loadLabels);
+  const [saveStatus, setSaveStatus] = useState({}); // pair_id -> saving | saved | error
   const [typeCorrect, setTypeCorrect] = useState({ left: true, right: true });
+
+  // Reset position when the reason filter changes — render-phase, not an effect.
+  const [seenFilter, setSeenFilter] = useState(reasonFilter);
+  if (reasonFilter !== seenFilter) { setSeenFilter(reasonFilter); setIndex(0); }
 
   const pair = pairs[index];
   const done = index >= pairs.length;
   const labeledCount = Object.keys(labels).length;
+  const savedCount = Object.values(saveStatus).filter(s => s === 'saved').length;
+  const errorCount = Object.values(saveStatus).filter(s => s === 'error').length;
 
   const persist = useCallback((next) => {
     setLabels(next);
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* quota — keep in memory */ }
   }, []);
 
-  const commit = useCallback((matchType) => {
+  // Server is the source of truth (golden_labels). Advance optimistically, save
+  // in the background, and surface the outcome so a failed save isn't silent.
+  const commit = async (matchType) => {
     if (!pair) return;
+    const id = pair.pair_id;
     const record = {
-      pair_id: pair.pair_id,
+      pair_id: id,
       reason: pair.reason,
       left_thing_id: pair.left.thing_id,
       right_thing_id: pair.right.thing_id,
@@ -118,11 +140,29 @@ export default function LabelingPage() {
       labeler: user?.email || user?.username || 'unknown',
       labeled_at: new Date().toISOString(),
     };
-    persist({ ...labels, [pair.pair_id]: record });
-    saveLabel.mutate(record); // best-effort; local copy is the source of truth until #416 ships
+    persist({ ...labels, [id]: record });
     setTypeCorrect({ left: true, right: true });
     setIndex(i => i + 1);
-  }, [pair, typeCorrect, labels, user, persist, saveLabel]);
+    if (usingSample) return; // no golden_labels store behind the seeded sample
+    setSaveStatus(s => ({ ...s, [id]: 'saving' }));
+    try {
+      await saveLabel.mutateAsync(record);
+      setSaveStatus(s => ({ ...s, [id]: 'saved' }));
+    } catch {
+      setSaveStatus(s => ({ ...s, [id]: 'error' }));
+    }
+  };
+
+  const retryFailed = async () => {
+    const failed = Object.keys(saveStatus).filter(id => saveStatus[id] === 'error');
+    for (const id of failed) {
+      const record = labels[id];
+      if (!record) continue;
+      setSaveStatus(s => ({ ...s, [id]: 'saving' }));
+      try { await saveLabel.mutateAsync(record); setSaveStatus(s => ({ ...s, [id]: 'saved' })); }
+      catch { setSaveStatus(s => ({ ...s, [id]: 'error' })); }
+    }
+  };
 
   const exportLabels = useCallback(() => {
     const blob = new Blob([JSON.stringify(Object.values(labels), null, 2)], { type: 'application/json' });
@@ -134,21 +174,25 @@ export default function LabelingPage() {
     URL.revokeObjectURL(url);
   }, [labels, labeledCount]);
 
-  // Keyboard-fast flow
+  // Keyboard-fast flow. Keep the latest handlers in a ref so the listener binds
+  // once (handlers are recreated each render under React Compiler).
+  const kbdRef = useRef(null);
+  useEffect(() => { kbdRef.current = { commit, exportLabels, pairsLen: pairs.length }; });
   useEffect(() => {
     function onKey(e) {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      const { commit, exportLabels, pairsLen } = kbdRef.current;
       const mt = MATCH_TYPES.find(m => m.hint === e.key);
       if (mt) { commit(mt.key); return; }
       if (e.key === 't') setTypeCorrect(s => ({ ...s, left: !s.left }));
       else if (e.key === 'y') setTypeCorrect(s => ({ ...s, right: !s.right }));
-      else if (e.key === 'ArrowRight') setIndex(i => Math.min(i + 1, pairs.length));
+      else if (e.key === 'ArrowRight') setIndex(i => Math.min(i + 1, pairsLen));
       else if (e.key === 'ArrowLeft') setIndex(i => Math.max(i - 1, 0));
       else if (e.key === 'e') exportLabels();
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [commit, exportLabels, pairs.length]);
+  }, []);
 
   return (
     <>
@@ -159,25 +203,48 @@ export default function LabelingPage() {
 
       <div className={`mb-4 p-3 rounded border text-xs ${usingSample ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-indigo-100 bg-indigo-50 text-indigo-800'}`}>
         {usingSample
-          ? <>Seeded sample (fragmentation clusters + samples) — the live candidate-pair feed and durable store land with <code>#416</code>. Labels persist locally and export to JSON in the meantime.</>
-          : <>Live candidate-pair feed.</>}
+          ? <>Seeded sample — live <code>/admin/er/candidate-pairs</code> needs an authed session. Labels persist locally + export to JSON.</>
+          : <>Live feed — <span className="font-medium">{total}</span> candidate pairs{isFetchingNextPage ? ' (loading…)' : ''}. Labels save to the <code>golden_labels</code> store (#421).</>}
       </div>
 
       {/* Progress */}
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-3 flex items-center gap-3">
         <div className="flex-1 h-2 bg-gray-100 rounded overflow-hidden">
-          <div className="h-full bg-indigo-500" style={{ width: `${pairs.length ? (labeledCount / pairs.length) * 100 : 0}%` }} />
+          <div className="h-full bg-indigo-500" style={{ width: `${total ? (labeledCount / total) * 100 : 0}%` }} />
         </div>
-        <span className="text-xs text-gray-500 tabular-nums">{labeledCount} labeled / {pairs.length}</span>
+        <span className="text-xs text-gray-500 tabular-nums">{labeledCount} labeled / {total}</span>
+        {!usingSample && (
+          <span className="text-xs tabular-nums">
+            <span className="text-green-600">{savedCount} saved</span>
+            {errorCount > 0 && <span className="text-red-600"> · {errorCount} failed</span>}
+          </span>
+        )}
+        {errorCount > 0 && (
+          <button onClick={retryFailed} className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50">Retry failed</button>
+        )}
         <button onClick={exportLabels} disabled={labeledCount === 0} className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40">
           Export<Kbd>e</Kbd>
         </button>
       </div>
 
+      {/* Reason filter — deliberately mix types (diversity > volume) */}
+      <div className="mb-4 flex flex-wrap items-center gap-1.5 text-xs">
+        <button onClick={() => setReasonFilter('')} className={`px-2 py-0.5 rounded border ${!reasonFilter ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+          All {allPairs.length}
+        </button>
+        {Object.keys(REASON_LABEL).filter(r => reasonCounts[r]).map(r => (
+          <button key={r} onClick={() => setReasonFilter(reasonFilter === r ? '' : r)} className={`px-2 py-0.5 rounded border ${reasonFilter === r ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+            {REASON_LABEL[r]} {reasonCounts[r]}
+          </button>
+        ))}
+      </div>
+
       {done ? (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-          <div className="text-sm font-medium text-gray-700">All caught up</div>
-          <p className="mt-1 text-xs text-gray-500">{labeledCount} pair(s) labeled in this batch.</p>
+          <div className="text-sm font-medium text-gray-700">{reasonFilter ? 'All caught up for this filter' : 'All caught up'}</div>
+          <p className="mt-1 text-xs text-gray-500">
+            {labeledCount} labeled{!usingSample && <> · <span className="text-green-600">{savedCount} saved to golden_labels</span>{errorCount > 0 && <span className="text-red-600"> · {errorCount} failed</span>}</>}.
+          </p>
           <div className="mt-4 flex items-center justify-center gap-2">
             <button onClick={() => setIndex(0)} className="text-xs px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50">Review from start</button>
             <button onClick={exportLabels} disabled={labeledCount === 0} className="text-xs px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40">Export golden set</button>
@@ -216,7 +283,16 @@ export default function LabelingPage() {
 
           <div className="mt-3 flex items-center justify-between text-xs">
             <button onClick={() => setIndex(i => Math.max(i - 1, 0))} disabled={index === 0} className="px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40">← Prev</button>
-            {labels[pair.pair_id] && <span className="text-green-600">labeled: {labels[pair.pair_id].match_type.replace(/_/g, ' ')}</span>}
+            {labels[pair.pair_id] && (
+              <span className="text-gray-500">
+                labeled: <span className="text-gray-700">{labels[pair.pair_id].match_type.replace(/_/g, ' ')}</span>
+                {!usingSample && saveStatus[pair.pair_id] && (
+                  <span className={saveStatus[pair.pair_id] === 'saved' ? 'text-green-600' : saveStatus[pair.pair_id] === 'error' ? 'text-red-600' : 'text-gray-400'}>
+                    {' '}· {saveStatus[pair.pair_id] === 'saved' ? 'saved ✓' : saveStatus[pair.pair_id] === 'error' ? 'save failed' : 'saving…'}
+                  </span>
+                )}
+              </span>
+            )}
             <button onClick={() => setIndex(i => i + 1)} className="px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50">Skip →</button>
           </div>
         </>

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import client from './client';
 
 // --- Admin ---
@@ -252,11 +252,16 @@ export function useSeedHistory(limit = 20) {
   });
 }
 
-// --- Golden-set labeling (#404) ---
-export function useCandidatePairs({ limit = 25 } = {}) {
-  return useQuery({
+// --- Golden-set labeling (#404 / #421) ---
+// Cursor-paginated so the labeler can reach the full pool (not just page 1) —
+// the diverse `random`/`different` pairs sort last and were otherwise unreachable.
+export function useCandidatePairs({ limit = 100 } = {}) {
+  return useInfiniteQuery({
     queryKey: ['er', 'candidate-pairs', limit],
-    queryFn: () => client.get('/admin/er/candidate-pairs', { params: { limit } }).then(r => r.data),
+    queryFn: ({ pageParam }) =>
+      client.get('/admin/er/candidate-pairs', { params: { limit, cursor: pageParam } }).then(r => r.data),
+    initialPageParam: 0,
+    getNextPageParam: (last) => (last?.next_cursor != null ? Number(last.next_cursor) : undefined),
     staleTime: 5 * 60_000,
     retry: false, // fail fast so the page falls back to the seeded sample
   });
