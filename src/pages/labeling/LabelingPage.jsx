@@ -35,40 +35,52 @@ function Kbd({ children }) {
   );
 }
 
+// Coerce any backend field to a safe display string — metadata/canonical_ids can
+// carry nested objects/arrays, which crash React if rendered directly.
+function text(v) {
+  if (v == null) return '';
+  if (typeof v !== 'object') return String(v);
+  if (Array.isArray(v)) return v.map(text).filter(Boolean).join(', ');
+  return text(v.name ?? v.title ?? v.value ?? Object.values(v).find(x => x != null));
+}
+
 function EntityCard({ entity, typeCorrect, onToggleType, side }) {
-  const ids = Object.entries(entity.ids || {});
+  const ids = Object.entries(entity.ids && typeof entity.ids === 'object' ? entity.ids : {});
+  const title = text(entity.title);
+  const type = text(entity.type);
+  const qs = typeof entity.quality_score === 'number' ? entity.quality_score : Number(entity.quality_score) || 0;
   return (
     <div className="flex-1 bg-white rounded-lg border border-gray-200 p-4">
       <div className="flex gap-3">
-        {entity.image_url ? (
+        {typeof entity.image_url === 'string' && entity.image_url ? (
           <img src={entity.image_url} alt="" className="w-16 h-24 object-cover rounded bg-gray-100" onError={e => { e.currentTarget.style.display = 'none'; }} />
         ) : (
           <div className="w-16 h-24 shrink-0 rounded bg-gray-100 flex items-center justify-center text-2xl font-semibold text-gray-300">
-            {(entity.title || '?').charAt(0)}
+            {(title || '?').charAt(0)}
           </div>
         )}
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-gray-900 leading-snug">{entity.title}</div>
-          <div className="text-xs text-gray-500 mt-0.5">{entity.creator || '—'}</div>
+          <div className="text-sm font-semibold text-gray-900 leading-snug">{title || '(untitled)'}</div>
+          <div className="text-xs text-gray-500 mt-0.5">{text(entity.creator) || '—'}</div>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{entity.type}</span>
-            {entity.year && <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{entity.year}</span>}
+            {type && <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{type}</span>}
+            {entity.year != null && <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{text(entity.year)}</span>}
             {entity.source && (
-              <a href={entity.url} target="_blank" rel="noreferrer" className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-indigo-600 hover:bg-gray-200">
-                {entity.source} ↗
+              <a href={typeof entity.url === 'string' ? entity.url : undefined} target="_blank" rel="noreferrer" className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-indigo-600 hover:bg-gray-200">
+                {text(entity.source)} ↗
               </a>
             )}
           </div>
         </div>
       </div>
       <div className="mt-3 text-[11px] text-gray-400 space-y-0.5">
-        {ids.length > 0 ? ids.map(([k, v]) => <div key={k}><span className="text-gray-400">{k}:</span> <span className="text-gray-500 tabular-nums">{v}</span></div>) : <div>no external ids</div>}
+        {ids.length > 0 ? ids.map(([k, v]) => <div key={k}><span className="text-gray-400">{k}:</span> <span className="text-gray-500 tabular-nums">{text(v)}</span></div>) : <div>no external ids</div>}
         <div className="flex items-center gap-2 pt-1">
           <span>quality</span>
           <div className="flex-1 h-1.5 bg-gray-100 rounded overflow-hidden max-w-[120px]">
-            <div className={`h-full ${entity.quality_score < 0.5 ? 'bg-red-400' : 'bg-green-400'}`} style={{ width: `${Math.round((entity.quality_score || 0) * 100)}%` }} />
+            <div className={`h-full ${qs < 0.5 ? 'bg-red-400' : 'bg-green-400'}`} style={{ width: `${Math.round(qs * 100)}%` }} />
           </div>
-          <span className="tabular-nums text-gray-500">{(entity.quality_score ?? 0).toFixed(2)}</span>
+          <span className="tabular-nums text-gray-500">{qs.toFixed(2)}</span>
         </div>
       </div>
       <button
@@ -77,7 +89,7 @@ function EntityCard({ entity, typeCorrect, onToggleType, side }) {
           typeCorrect ? 'border-gray-200 text-gray-500 hover:bg-gray-50' : 'border-amber-300 bg-amber-50 text-amber-700'
         }`}
       >
-        {side} type: <span className="font-medium">{typeCorrect ? `✓ ${entity.type} correct` : `✗ ${entity.type} wrong`}</span>
+        {side} type: <span className="font-medium">{typeCorrect ? `✓ ${type} correct` : `✗ ${type} wrong`}</span>
       </button>
     </div>
   );
