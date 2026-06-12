@@ -110,7 +110,6 @@ export default function LabelingPage() {
   const livePairs = query.data?.pages?.flatMap(p => p.pairs || []);
   const usingSample = !livePairs || livePairs.length === 0;
   const allPairs = usingSample ? MOCK_PAIRS : livePairs;
-  const total = usingSample ? MOCK_PAIRS.length : (query.data?.pages?.[0]?.total ?? allPairs.length);
   const reasonCounts = allPairs.reduce((a, p) => ({ ...a, [p.reason]: (a[p.reason] || 0) + 1 }), {});
 
   const [reasonFilter, setReasonFilter] = useState('');
@@ -130,6 +129,17 @@ export default function LabelingPage() {
   const labeledCount = Object.keys(labels).length;
   const savedCount = Object.values(saveStatus).filter(s => s === 'saved').length;
   const errorCount = Object.values(saveStatus).filter(s => s === 'error').length;
+
+  // Pool accounting from the server (#423): the candidate feed EXCLUDES already-labeled
+  // pairs, so `remaining`/`total` is the UNLABELED count — the full pool = labeled + remaining.
+  // (This is why the pool "shrinks" as you label; it's progress, not data loss.)
+  const page0 = query.data?.pages?.[0];
+  const serverLabeled = usingSample ? 0 : (page0?.labeled_count ?? 0);
+  const serverRemaining = usingSample ? MOCK_PAIRS.length : (page0?.remaining ?? page0?.total ?? allPairs.length);
+  const poolTotal = serverLabeled + serverRemaining;
+  const sessionLabeled = allPairs.filter(p => labels[p.pair_id]).length; // labeled this load, not yet excluded server-side
+  const labeledTotal = serverLabeled + sessionLabeled;
+  const remainingNow = Math.max(poolTotal - labeledTotal, 0);
 
   const persist = useCallback((next) => {
     setLabels(next);
@@ -216,18 +226,18 @@ export default function LabelingPage() {
       <div className={`mb-4 p-3 rounded border text-xs ${usingSample ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-indigo-100 bg-indigo-50 text-indigo-800'}`}>
         {usingSample
           ? <>Seeded sample — live <code>/admin/er/candidate-pairs</code> needs an authed session. Labels persist locally + export to JSON.</>
-          : <>Live feed — <span className="font-medium">{total}</span> candidate pairs{isFetchingNextPage ? ' (loading…)' : ''}. Labels save to the <code>golden_labels</code> store (#421).</>}
+          : <>Live feed — <span className="font-medium">{labeledTotal}</span> of <span className="font-medium">{poolTotal}</span> pairs labeled, <span className="font-medium">{remainingNow}</span> remaining{isFetchingNextPage ? ' · loading…' : ''}. Saved to the <code>golden_labels</code> store (#421). The feed only serves unlabeled pairs, so it shrinks as you go — that's progress, not data loss.</>}
       </div>
 
       {/* Progress */}
       <div className="mb-3 flex items-center gap-3">
         <div className="flex-1 h-2 bg-gray-100 rounded overflow-hidden">
-          <div className="h-full bg-indigo-500" style={{ width: `${total ? (labeledCount / total) * 100 : 0}%` }} />
+          <div className="h-full bg-indigo-500" style={{ width: `${poolTotal ? (labeledTotal / poolTotal) * 100 : 0}%` }} />
         </div>
-        <span className="text-xs text-gray-500 tabular-nums">{labeledCount} labeled / {total}</span>
+        <span className="text-xs text-gray-500 tabular-nums">{labeledTotal} labeled · {remainingNow} remaining</span>
         {!usingSample && (
           <span className="text-xs tabular-nums">
-            <span className="text-green-600">{savedCount} saved</span>
+            <span className="text-green-600">{savedCount} saved this session</span>
             {errorCount > 0 && <span className="text-red-600"> · {errorCount} failed</span>}
           </span>
         )}
@@ -255,7 +265,9 @@ export default function LabelingPage() {
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
           <div className="text-sm font-medium text-gray-700">{reasonFilter ? 'All caught up for this filter' : 'All caught up'}</div>
           <p className="mt-1 text-xs text-gray-500">
-            {labeledCount} labeled{!usingSample && <> · <span className="text-green-600">{savedCount} saved to golden_labels</span>{errorCount > 0 && <span className="text-red-600"> · {errorCount} failed</span>}</>}.
+            {!usingSample
+              ? <><span className="font-medium">{labeledTotal}</span> of {poolTotal} labeled in <code>golden_labels</code>{remainingNow > 0 ? <> · {remainingNow} still unlabeled</> : <> · nothing left to label 🎉</>}{errorCount > 0 && <span className="text-red-600"> · {errorCount} failed to save</span>}.</>
+              : <>{labeledCount} pair(s) labeled in this batch.</>}
           </p>
           <div className="mt-4 flex items-center justify-center gap-2">
             <button onClick={() => setIndex(0)} className="text-xs px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50">Review from start</button>
