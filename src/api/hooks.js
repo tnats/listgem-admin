@@ -208,6 +208,14 @@ export function useWorkRollup() {
   });
 }
 
+export function useScorecardHistory() {
+  return useQuery({
+    queryKey: ['metrics', 'scorecard-history'],
+    queryFn: () => client.get('/metrics/scorecard/history').then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
 // --- Type Rules ---
 export function useTypeRules() {
   return useQuery({

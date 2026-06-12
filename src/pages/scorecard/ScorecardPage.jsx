@@ -6,6 +6,7 @@ import {
   useDeduplicationEffectiveness,
   useQualityTrends,
   useWorkRollup,
+  useScorecardHistory,
 } from '../../api/hooks';
 import { BASELINE, BASELINE_DATE } from './baseline';
 
@@ -59,6 +60,37 @@ function MetricTile({ label, current, baseline, format, higherIsBetter, sparklin
         </span>
         <Sparkline values={sparkline} color={color || '#6366f1'} />
       </div>
+    </div>
+  );
+}
+
+// ER precision/recall/F1 from the eval (#400/#421), with provenance badge.
+function ErEvalTile({ precision, recall, f1, source, sparkline }) {
+  const live = precision != null || recall != null || f1 != null;
+  const golden = source === 'golden';
+  return (
+    <div className="col-span-2 bg-white rounded-lg border border-gray-200 p-4 flex flex-col">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm text-gray-500">ER precision · recall · F1</div>
+        {live && source && (
+          <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${golden ? 'text-green-700 bg-green-50' : 'text-amber-700 bg-amber-50'}`}>
+            {golden ? 'human-graded (golden)' : `${source}`}
+          </span>
+        )}
+      </div>
+      {live ? (
+        <div className="mt-2 flex items-end gap-6">
+          {[['Precision', precision], ['Recall', recall], ['F1', f1]].map(([k, v]) => (
+            <div key={k}>
+              <div className="text-2xl font-semibold text-gray-900 tabular-nums">{v != null ? v.toFixed(3) : '—'}</div>
+              <div className="text-xs text-gray-400">{k}</div>
+            </div>
+          ))}
+          <div className="ml-auto self-end"><Sparkline values={sparkline} color="#10b981" /></div>
+        </div>
+      ) : (
+        <div className="mt-2 text-2xl font-semibold text-gray-300">pending eval (#400)</div>
+      )}
     </div>
   );
 }
@@ -172,6 +204,20 @@ export default function ScorecardPage() {
   const dedup = useDeduplicationEffectiveness();
   const trends = useQualityTrends();
   const workRollup = useWorkRollup();
+  const history = useScorecardHistory();
+
+  // Weekly scorecard snapshots (#415/#418) — er_* eval metrics + fragmentation trend.
+  const snapshots = history.data?.snapshots || [];
+  const latestSnap = snapshots[snapshots.length - 1] || {};
+  const snapMetrics = latestSnap.metrics || {};
+  const erPrecision = numberOrNull(snapMetrics.er_precision);
+  const erRecall = numberOrNull(snapMetrics.er_recall);
+  const erF1 = numberOrNull(snapMetrics.er_f1);
+  const erSource = snapMetrics.er_eval_source;
+  const erF1Trend = snapshots.map(s => numberOrNull(s.metrics?.er_f1)).filter(v => v != null);
+  const fragmentationPct = numberOrNull(latestSnap.fragmentation_pct);
+  const fragmentationTrend = snapshots.map(s => numberOrNull(s.fragmentation_pct)).filter(v => v != null);
+  const editionsLinked = numberOrNull(snapMetrics.editions_linked);
 
   const overall = quality.data?.overall || {};
   const distribution = quality.data?.distribution || [];
@@ -279,29 +325,34 @@ export default function ScorecardPage() {
         />
       </div>
 
+      {/* Entity resolution — live from the eval (#421) + weekly snapshots (#415/#418) */}
+      <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Entity resolution</h2>
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <ErEvalTile precision={erPrecision} recall={erRecall} f1={erF1} source={erSource} sparkline={erF1Trend} />
+        <MetricTile
+          label="Edition fragmentation rate"
+          current={fragmentationPct}
+          baseline={BASELINE.editionFragmentationBooksPct}
+          format="pct"
+          higherIsBetter={false}
+          sparkline={fragmentationTrend}
+          color="#f59e0b"
+        />
+        <MetricTile
+          label="Editions linked to a Work"
+          current={editionsLinked}
+          baseline={null}
+          format="count"
+          higherIsBetter
+          color="#6366f1"
+        />
+      </div>
+
       {/* Pending backend */}
       <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
         Pending backend
       </h2>
       <div className="grid grid-cols-4 gap-4">
-        <StubTile
-          label="Edition fragmentation rate"
-          baseline={BASELINE.editionFragmentationBooksPct}
-          format="pct"
-          pendingIssue="#396"
-        />
-        <StubTile
-          label="% entities linked to a Work"
-          baseline={null}
-          format="pct"
-          pendingIssue="#396"
-        />
-        <StubTile
-          label="ER precision / recall / F1"
-          baseline={null}
-          format="score"
-          pendingIssue="#400"
-        />
         <StubTile
           label="Semantic recall@K"
           baseline={null}
