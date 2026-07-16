@@ -1,7 +1,76 @@
 import { useState, useMemo } from 'react';
 import PageHeader from '../../components/PageHeader';
-import { useLowQualityThings, useReEnrich } from '../../api/hooks';
-import { MOCK_LOW_QUALITY } from './mockLowQuality';
+import { useLowQualityThings, useReEnrich, useReEnrichSweepStatus } from '../../api/hooks';
+import { MOCK_LOW_QUALITY, MOCK_SWEEP } from './mockLowQuality';
+
+function fmtDate(v) {
+  if (!v) return '—';
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+}
+
+// Read-only quality-tail re-enrich sweep status (#473 / #420). No kill switch /
+// start button — the sweep is a manual CLI, not a daemon.
+function SweepPanel({ sweep, isSample }) {
+  if (!sweep || sweep.available === false) {
+    return (
+      <div className="mb-4 bg-white rounded-lg border border-dashed border-gray-200 p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-gray-700">Quality-tail sweep</h2>
+          <span className="text-xs font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">awaiting deploy</span>
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          Bulk worst-first re-enrich (#420). Live once <code>/admin/re-enrich/sweep/status</code> reports <code>available</code>.
+        </p>
+      </div>
+    );
+  }
+  const processed = sweep.processed || 0;
+  const remaining = sweep.remaining_candidates || 0;
+  const totalPool = processed + remaining;
+  const pct = totalPool > 0 ? (processed / totalPool) * 100 : 0;
+  const delta = sweep.avg_quality_delta;
+  const outcomes = sweep.outcomes || {};
+  return (
+    <div className="mb-4 bg-white rounded-lg border border-gray-200 p-4">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-gray-700">Quality-tail sweep</h2>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">manual CLI</span>
+          {isSample && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">sample</span>}
+        </div>
+        <span className="text-xs text-gray-400">last run {fmtDate(sweep.last_run_at)}</span>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-2.5 bg-gray-100 rounded overflow-hidden">
+          <div className="h-full bg-indigo-400 rounded" style={{ width: `${Math.min(pct, 100)}%` }} />
+        </div>
+        <span className="text-xs tabular-nums text-gray-500">{processed.toLocaleString()} / {totalPool.toLocaleString()}</span>
+      </div>
+      <div className="mt-3 grid grid-cols-4 gap-3 text-xs">
+        <div>
+          <div className="text-lg font-semibold text-gray-900 tabular-nums">{remaining.toLocaleString()}</div>
+          <div className="text-gray-400">remaining</div>
+        </div>
+        <div>
+          <div className={`text-lg font-semibold tabular-nums ${delta > 0 ? 'text-green-700' : 'text-gray-900'}`}>
+            {delta == null ? '—' : `${delta > 0 ? '+' : ''}${Number(delta).toFixed(2)}`}
+          </div>
+          <div className="text-gray-400">avg quality Δ</div>
+        </div>
+        <div>
+          <div className="text-lg font-semibold text-gray-900 tabular-nums">{(outcomes.improved ?? 0).toLocaleString()}</div>
+          <div className="text-gray-400">improved</div>
+        </div>
+        <div>
+          <div className="text-lg font-semibold text-gray-900 tabular-nums">{(outcomes.merged ?? 0).toLocaleString()}</div>
+          <div className="text-gray-400">merged</div>
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] text-gray-400">Read-only — kicked from a CLI, never touches list memberships. Δ feeds the scorecard <code>low_quality_pct</code>.</p>
+    </div>
+  );
+}
 
 const ISSUE_LABEL = {
   missing_title: 'missing title',
@@ -10,6 +79,7 @@ const ISSUE_LABEL = {
   low_enrichment: 'low enrichment',
   uncertain_type: 'uncertain type',
   general_low_quality: 'general',
+  person_as_content: 'person-as-content',
 };
 const ISSUE_CLS = {
   missing_title: 'bg-red-50 text-red-700',
@@ -18,27 +88,41 @@ const ISSUE_CLS = {
   low_enrichment: 'bg-yellow-50 text-yellow-700',
   uncertain_type: 'bg-violet-50 text-violet-700',
   general_low_quality: 'bg-gray-100 text-gray-600',
+  person_as_content: 'bg-rose-50 text-rose-700',
 };
 
 export default function TriagePage() {
+  const [typeFilter, setTypeFilter] = useState('');
+  const [issueFilter, setIssueFilter] = useState('');
+  const [status, setStatus] = useState({}); // thing_id -> 'queued' | 'done' | 'failed'
+
   const query = useLowQualityThings();
   const reEnrich = useReEnrich();
+  const sweepQuery = useReEnrichSweepStatus();
+  const sweep = sweepQuery.data || MOCK_SWEEP;
+  const sweepIsSample = !sweepQuery.data;
+  // person_as_content is quality-independent, so it's fetched server-side on demand
+  // (?issue=person_as_content) rather than filtered from the quality<0.5 tail.
+  const personActive = issueFilter === 'person_as_content';
+  const personQuery = useLowQualityThings({ issue: 'person_as_content', minQuality: 1, enabled: personActive });
 
   const live = query.data && query.data.things ? query.data : null;
   const usingSample = !live;
   const data = live || MOCK_LOW_QUALITY;
   const things = useMemo(() => data.things || [], [data]);
   const breakdown = data.issue_breakdown || [];
+  const heuristics = data.heuristics || {};
 
-  const [typeFilter, setTypeFilter] = useState('');
-  const [issueFilter, setIssueFilter] = useState('');
-  const [status, setStatus] = useState({}); // thing_id -> 'queued' | 'done' | 'failed'
+  // Show server-filtered person rows when that chip is active; otherwise the tail.
+  // Fallback filters the loaded set (sample mode / while the server query loads).
+  const personThings = personQuery.data?.things ?? things.filter(t => t.primary_issue === 'person_as_content');
+  const displayThings = personActive ? personThings : things;
 
-  const types = useMemo(() => [...new Set(things.map(t => t.type))].sort(), [things]);
+  const types = useMemo(() => [...new Set(displayThings.map(t => t.type))].sort(), [displayThings]);
 
   const rows = useMemo(
-    () => things.filter(t => (!typeFilter || t.type === typeFilter) && (!issueFilter || t.primary_issue === issueFilter)),
-    [things, typeFilter, issueFilter],
+    () => displayThings.filter(t => (!typeFilter || t.type === typeFilter) && (personActive || !issueFilter || t.primary_issue === issueFilter)),
+    [displayThings, typeFilter, issueFilter, personActive],
   );
 
   async function triage(thing) {
@@ -64,12 +148,15 @@ export default function TriagePage() {
           : <>Live tail from <code>/metrics/low-quality-things</code>.</>}
       </div>
 
+      <SweepPanel sweep={sweep} isSample={sweepIsSample} />
+
       {/* Issue breakdown */}
       <div className="mb-4 flex flex-wrap gap-2">
         {breakdown.map(b => (
           <button
             key={b.issue}
             onClick={() => setIssueFilter(issueFilter === b.issue ? '' : b.issue)}
+            title={b.issue === 'person_as_content' ? heuristics.person_as_content : undefined}
             className={`text-xs px-2 py-1 rounded border ${issueFilter === b.issue ? 'border-indigo-400 ring-1 ring-indigo-300' : 'border-gray-200'} ${ISSUE_CLS[b.issue] || 'bg-gray-100 text-gray-600'}`}
           >
             {ISSUE_LABEL[b.issue] || b.issue} · <span className="tabular-nums">{Number(b.count).toLocaleString()}</span>
@@ -88,6 +175,13 @@ export default function TriagePage() {
         )}
         <span className="text-gray-400 ml-auto tabular-nums">{rows.length} shown</span>
       </div>
+
+      {personActive && (
+        <div className="mb-3 -mt-1 text-[11px] text-rose-700 bg-rose-50 border border-rose-100 rounded px-2 py-1.5">
+          Quality-independent — these are wrong-<em>type</em> mistypes (article bylines extracted as a Person, #442),
+          surfaced regardless of quality score. ~0 expected today; the chip lights up on regressions. Re-enrich re-runs the pipeline.
+        </div>
+      )}
 
       {/* Queue */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">

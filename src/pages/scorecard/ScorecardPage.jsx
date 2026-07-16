@@ -64,6 +64,56 @@ function MetricTile({ label, current, baseline, format, higherIsBetter, sparklin
   );
 }
 
+// Canonical-ID coverage — dual metric (any + strong) from #414's stable field.
+function CoverageTile({ anyPct, strongPct }) {
+  const cols = [
+    { key: 'any', label: 'any ID', current: anyPct, baseline: BASELINE.canonicalIdAnyPct },
+    { key: 'strong', label: 'authoritative', current: strongPct, baseline: BASELINE.canonicalIdStrongPct },
+  ];
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col">
+      <div className="text-sm text-gray-500">Canonical-ID coverage</div>
+      <div className="mt-2 flex items-start gap-6">
+        {cols.map(c => (
+          <div key={c.key}>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-semibold text-gray-900 tabular-nums">{fmt(c.current, 'pct')}</span>
+              <Delta current={c.current} baseline={c.baseline} higherIsBetter format="pct" />
+            </div>
+            <div className="mt-0.5 text-xs text-gray-400">
+              {c.label} · baseline <span className="tabular-nums text-gray-500">{fmt(c.baseline, 'pct')}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Work structure — positive-structure counts from the weekly snapshot (#418).
+function StructureTile({ worksTotal, worksMulti, editionsLinked }) {
+  const stats = [
+    { label: 'Works', value: worksTotal, title: 'Distinct Works' },
+    { label: 'Multi-ed.', value: worksMulti, title: 'Works with 2+ linked editions' },
+    { label: 'Linked', value: editionsLinked, title: 'Editions linked to a Work' },
+  ];
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col">
+      <div className="text-sm text-gray-500">Work structure</div>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        {stats.map(s => (
+          <div key={s.label} title={s.title}>
+            <div className="text-2xl font-semibold text-gray-900 tabular-nums">
+              {s.value == null ? '—' : Number(s.value).toLocaleString()}
+            </div>
+            <div className="mt-0.5 text-xs text-gray-400">{s.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ER precision/recall/F1 from the eval (#400/#421), with provenance badge.
 function ErEvalTile({ precision, recall, f1, source, sparkline }) {
   const live = precision != null || recall != null || f1 != null;
@@ -217,7 +267,10 @@ export default function ScorecardPage() {
   const erF1Trend = snapshots.map(s => numberOrNull(s.metrics?.er_f1)).filter(v => v != null);
   const fragmentationPct = numberOrNull(latestSnap.fragmentation_pct);
   const fragmentationTrend = snapshots.map(s => numberOrNull(s.fragmentation_pct)).filter(v => v != null);
+  // Positive Work-structure counts added to the snapshot JSONB by #418.
   const editionsLinked = numberOrNull(snapMetrics.editions_linked);
+  const worksTotal = numberOrNull(snapMetrics.works_total);
+  const worksMultiEdition = numberOrNull(snapMetrics.works_multi_edition);
 
   const overall = quality.data?.overall || {};
   const distribution = quality.data?.distribution || [];
@@ -230,13 +283,12 @@ export default function ScorecardPage() {
     overall.total_things,
   );
 
-  // Canonical-ID coverage (any) — backend key not yet firm; try a few shapes.
-  const canonicalAnyPct = numberOrNull(
-    dedupData.canonical_id_coverage_pct,
-    dedupData.canonical_coverage_pct,
-    dedupData.coverage_pct,
-    dedupData.canonical_id_any_pct,
-  );
+  // Canonical-ID coverage — #414 shipped a stable documented field with any + strong
+  // flavours (canonical_id_coverage.{any_pct,strong_pct}); the flat *_pct keys are
+  // back-compat aliases for "any".
+  const coverage = dedupData.canonical_id_coverage || {};
+  const canonicalAnyPct = numberOrNull(coverage.any_pct, dedupData.canonical_id_coverage_pct);
+  const canonicalStrongPct = numberOrNull(coverage.strong_pct, dedupData.canonical_id_strong_pct);
 
   // Extraction quality average (0..1)
   const extractionAvg = numberOrNull(overall.avg_quality);
@@ -297,14 +349,7 @@ export default function ScorecardPage() {
           higherIsBetter
           color="#6366f1"
         />
-        <MetricTile
-          label="Canonical-ID coverage (any)"
-          current={canonicalAnyPct}
-          baseline={BASELINE.canonicalIdAnyPct}
-          format="pct"
-          higherIsBetter
-          color="#10b981"
-        />
+        <CoverageTile anyPct={canonicalAnyPct} strongPct={canonicalStrongPct} />
         <MetricTile
           label="Extraction quality (avg)"
           current={extractionAvg}
@@ -330,7 +375,7 @@ export default function ScorecardPage() {
       <div className="grid grid-cols-4 gap-4 mb-6">
         <ErEvalTile precision={erPrecision} recall={erRecall} f1={erF1} source={erSource} sparkline={erF1Trend} />
         <MetricTile
-          label="Edition fragmentation rate"
+          label="Edition fragmentation (unresolved)"
           current={fragmentationPct}
           baseline={BASELINE.editionFragmentationBooksPct}
           format="pct"
@@ -338,13 +383,10 @@ export default function ScorecardPage() {
           sparkline={fragmentationTrend}
           color="#f59e0b"
         />
-        <MetricTile
-          label="Editions linked to a Work"
-          current={editionsLinked}
-          baseline={null}
-          format="count"
-          higherIsBetter
-          color="#6366f1"
+        <StructureTile
+          worksTotal={worksTotal}
+          worksMulti={worksMultiEdition}
+          editionsLinked={editionsLinked}
         />
       </div>
 

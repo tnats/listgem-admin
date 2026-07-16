@@ -2,14 +2,26 @@ import { useState } from 'react';
 import PageHeader from '../../components/PageHeader';
 import StatCard from '../../components/StatCard';
 import StatusBadge from '../../components/StatusBadge';
-import { useCrawlAnalytics, useRegistrySearch, useTypeRules, useQueueStats } from '../../api/hooks';
+import { useCrawlAnalytics, useRegistrySearch, useTypeRules, useQueueStats, useQualityByType } from '../../api/hooks';
 import client from '../../api/client';
+
+// Commodity types retired by #456 ("curation, not directory") — should be empty.
+const RETIRED_TYPES = ['Cafe', 'Gym', 'Bar', 'Store'];
 
 export default function PipelinePage() {
   const { data: crawls } = useCrawlAnalytics();
   const { data: registry } = useRegistrySearch();
   const { data: typeRulesData } = useTypeRules();
   const { data: queue } = useQueueStats();
+  const { data: byType } = useQualityByType();
+
+  // Taxonomy health: retired-type sightings from live per-type counts (#456).
+  const typeCounts = new Map((byType?.types || []).map(t => [String(t.type).toLowerCase(), parseInt(t.count) || 0]));
+  const hasTypeData = (byType?.types || []).length > 0;
+  const retiredSightings = RETIRED_TYPES.map(t => ({ type: t, count: typeCounts.get(t.toLowerCase()) ?? 0 }));
+  const sightingCount = retiredSightings.filter(r => r.count > 0).length;
+  // Parent-type drift (#441) — awaits a backend drift count; read defensively if present.
+  const parentTypeDrift = byType?.parent_type_drift ?? byType?.drift_count ?? null;
 
   // Re-crawl form
   const [recrawlUrl, setRecrawlUrl] = useState('');
@@ -189,6 +201,45 @@ export default function PipelinePage() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Taxonomy Health — #456 retired-type prune + #441 parent-type drift */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-sm font-medium text-gray-700">Taxonomy Health</h2>
+          {hasTypeData && (
+            sightingCount === 0
+              ? <span className="text-xs font-medium text-green-700 bg-green-50 px-1.5 py-0.5 rounded">curation-clean</span>
+              : <span className="text-xs font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">{sightingCount} retired-type sighting{sightingCount === 1 ? '' : 's'}</span>
+          )}
+        </div>
+        <p className="text-xs text-gray-400 mb-3">
+          Commodity types retired by #456 (“curation, not directory”) should be empty.
+        </p>
+        {!hasTypeData ? (
+          <div className="text-xs text-gray-400">Awaiting live <code>/metrics/quality-by-type</code>.</div>
+        ) : (
+          <div className="grid grid-cols-4 gap-2">
+            {retiredSightings.map(r => (
+              <div key={r.type} className={`rounded border p-2 ${r.count > 0 ? 'border-amber-200 bg-amber-50' : 'border-gray-100 bg-gray-50'}`}>
+                <div className={`text-lg font-semibold tabular-nums ${r.count > 0 ? 'text-amber-700' : 'text-gray-300'}`}>{r.count}</div>
+                <div className="text-xs text-gray-500">{r.type}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {sightingCount > 0 && (
+          <p className="mt-2 text-[11px] text-amber-700">
+            {retiredSightings.filter(r => r.count > 0).map(r => r.type).join(', ')} still carry Things —
+            route their detection rules to Restaurant-as-brand or reject the URL (per #456).
+          </p>
+        )}
+        <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
+          <span className="text-gray-500">Parent-type drift <span className="text-gray-400">· #441</span></span>
+          {parentTypeDrift == null
+            ? <span className="text-gray-400">awaiting backend drift count</span>
+            : <span className={`tabular-nums font-medium ${parentTypeDrift > 0 ? 'text-amber-700' : 'text-green-700'}`}>{parentTypeDrift} drifted</span>}
         </div>
       </div>
 

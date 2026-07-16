@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import PageHeader from '../../components/PageHeader';
 import { useHybridSearch } from '../../api/hooks';
-import { MOCK_HYBRID } from './mockSearch';
+import { mockFor } from './mockSearch';
+
+const isPersonType = t => /^person$/i.test(t || '');
 
 const JUDGE_KEY = 'searchJudgments_v1';
 
@@ -36,14 +38,67 @@ function ResultRow({ rank, r, relevance, onJudge }) {
   );
 }
 
+// Type distribution over the result set — makes the #429 "Person floods
+// type-implied queries" regression observable (backend returns no facets here,
+// so it's computed client-side from the ranked results).
+export function TypeDistribution({ facets, total, personFlood }) {
+  const max = facets[0]?.count || 1;
+  return (
+    <div className="mb-4 bg-white rounded-lg border border-gray-200 p-4">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-sm font-medium text-gray-700">
+          Type distribution <span className="text-gray-400 font-normal">· {total} results</span>
+        </h2>
+        {personFlood && (
+          <span className="text-xs font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">
+            Person-dominated · likely #429
+          </span>
+        )}
+      </div>
+      <div className="space-y-1">
+        {facets.map(f => {
+          const person = isPersonType(f.type);
+          const share = total ? (f.count / total) * 100 : 0;
+          return (
+            <div key={f.type} className="flex items-center gap-2 text-xs">
+              <span className={`w-28 shrink-0 truncate ${person ? 'text-amber-700 font-medium' : 'text-gray-600'}`}>{f.type}</span>
+              <div className="flex-1 h-2 bg-gray-100 rounded overflow-hidden">
+                <div className={`h-full ${person ? 'bg-amber-400' : 'bg-indigo-400'}`} style={{ width: `${(f.count / max) * 100}%` }} />
+              </div>
+              <span className="w-20 text-right tabular-nums text-gray-400">{f.count} · {share.toFixed(0)}%</span>
+            </div>
+          );
+        })}
+      </div>
+      {personFlood && (
+        <p className="mt-2 text-[11px] text-gray-400">
+          Actors matching transitively via credits (“known for”) outrank the implied type — the #429
+          regression. Judge the Person rows ✗ to capture it in the golden set.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function SearchQualityPage() {
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
   const live = useHybridSearch(query);
 
-  const data = live.data?.results ? live.data : (query ? MOCK_HYBRID : null);
+  const data = live.data?.results ? live.data : (query ? mockFor(query) : null);
   const usingSample = !!query && !live.data?.results;
   const results = data?.results || [];
+
+  // Type distribution (client-side facets) for the #429 Person-flood signal.
+  const facetCounts = results.reduce((acc, r) => {
+    const t = r.type || 'unknown';
+    acc[t] = (acc[t] || 0) + 1;
+    return acc;
+  }, {});
+  const facets = Object.entries(facetCounts)
+    .map(([type, count]) => ({ type, count }))
+    .sort((a, b) => b.count - a.count);
+  const personFlood = results.length >= 5 && facets[0] && isPersonType(facets[0].type);
 
   const [judgments, setJudgments] = useState(loadJudgments);
   const judged = judgments[query] || {};
@@ -76,7 +131,7 @@ export default function SearchQualityPage() {
     <>
       <PageHeader
         title="Search Quality Inspector"
-        description="Run a query, compare lexical vs hybrid (RRF) ranking, and mark relevance to build the semantic-recall golden query set (#406 → #400)."
+        description="Run a query, see its type distribution (the #429 Person-flood signal), compare lexical vs hybrid (RRF) ranking, and mark relevance to build the semantic-recall golden query set (#406 → #400)."
       />
 
       <form
@@ -107,6 +162,8 @@ export default function SearchQualityPage() {
               : <>Live <code>/search/hybrid</code> · mode <span className="font-medium">{data.mode}</span> · {data.count} results.</>}
             {' '}<span className="text-violet-600">{semanticWins} semantic-only win(s)</span> the lexical ranker missed.
           </div>
+
+          <TypeDistribution facets={facets} total={results.length} personFlood={personFlood} />
 
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white rounded-lg border border-gray-200 p-4">

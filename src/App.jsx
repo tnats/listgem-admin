@@ -19,6 +19,7 @@ import ScorecardPage from './pages/scorecard/ScorecardPage';
 import LabelingPage from './pages/labeling/LabelingPage';
 import EntityBrowserPage from './pages/entities/EntityBrowserPage';
 import ErQueuePage from './pages/entities/ErQueuePage';
+import PlacesPage from './pages/places/PlacesPage';
 import TriagePage from './pages/triage/TriagePage';
 import SearchQualityPage from './pages/search-quality/SearchQualityPage';
 
@@ -56,6 +57,7 @@ export default function App() {
               <Route path="labeling" element={<LabelingPage />} />
               <Route path="entities" element={<EntityBrowserPage />} />
               <Route path="er-queue" element={<ErQueuePage />} />
+              <Route path="places" element={<PlacesPage />} />
               <Route path="triage" element={<TriagePage />} />
               <Route path="search-quality" element={<SearchQualityPage />} />
               <Route path="pipeline" element={<PipelinePage />} />
