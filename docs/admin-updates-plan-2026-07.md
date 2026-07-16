@@ -98,11 +98,13 @@ source). Nothing breaks, but the admin cannot observe the epic's central mechani
 - **Backend dependency:** classify/emit the category on `/metrics/low-quality-things`.
 - **Effort:** S (+ backend).
 
-### C2 · Search inspector: type-facet distribution view
+### C2 · Search inspector: type-facet distribution view — ✅ DONE
 - **Source:** #429 — the relevance regression is only visible as a type distribution (Person 65% of "Best TV Series").
-- **Change:** add a facet/type-distribution panel to `SearchQualityPage` (via `?facets=true` /
-  `/search/hybrid` facets) alongside the existing relevance judging, so Person-flooding regressions are visible.
-- **Effort:** S.
+- **Built:** a `TypeDistribution` panel on `SearchQualityPage` — computed **client-side** from the ranked
+  results (no backend facets needed), with a "Person-dominated · likely #429" flag when Person is the top
+  type. Added a query-aware seeded sample (`mockFor` / `MOCK_TV_SERIES`) so the flood case demos offline.
+- **Verified:** eslint, build, SSR smoke (mockFor selection + facet math + panel render).
+- **Effort:** S — done.
 
 ---
 
