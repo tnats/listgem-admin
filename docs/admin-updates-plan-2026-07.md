@@ -15,7 +15,10 @@ Effort: XS < 1h · S ~½ day · M ~1–2 days · L > 2 days.
 
 ## P0 — Confirmed contract drift (no backend dependency)
 
-### A1 · Scorecard: read stable canonical-ID coverage field + add "strong" tile
+> **Status (2026-07-16):** A1 + A2 ✅ shipped (branch `feat/admin-2026-07-backlog`). B1+B2 ✅ built
+> (Places monitor), now live against #470.
+
+### A1 · Scorecard: read stable canonical-ID coverage field + add "strong" tile — ✅ DONE
 - **Source:** #414 (closed, backend `4446a33`).
 - **Why:** `ScorecardPage.jsx:234–238` still defensively probes 4 guessed key names. Backend now
   returns a documented shape:
@@ -29,7 +32,7 @@ Effort: XS < 1h · S ~½ day · M ~1–2 days · L > 2 days.
 - **Acceptance:** "any" tile reads 97.3 with no key-probing; "strong" tile renders 96.6 vs 95.4 baseline.
 - **Effort:** XS.
 
-### A2 · Scorecard: confirm fragmentation baseline + surface Work-structure metrics
+### A2 · Scorecard: confirm fragmentation baseline + surface Work-structure metrics — ✅ DONE
 - **Source:** #418 (closed, backend `35e7d4d`).
 - **Why:** already mostly wired — scorecard reads `fragmentation_pct` from snapshots (`:218`) and
   `editions_linked` (`:220`). #418 redefined the metric to *unresolved* clusters (live 2 / 0.2% vs
@@ -59,7 +62,7 @@ source). Nothing breaks, but the admin cannot observe the epic's central mechani
 > rows; `/admin/type-rules` exists and is consumed in `PipelinePage`), so B3 shrinks to an optional
 > drift panel.
 
-### B1+B2 · New "Places" monitor — `entity_kind` distribution + chain-location watch
+### B1+B2 · New "Places" monitor — `entity_kind` distribution + chain-location watch — ✅ BUILT
 - **Source:** #456 W3 (#459), #453 (entity_kind classifier); #456 W5 (#462) — decision was to **leave**
   ~8,557 Hotels + ~1,426 Restaurants in place and "re-open the prune question only if usage data shows
   chain-location Things are actively polluting rankings/discovery." That signal belongs in the admin.
@@ -67,10 +70,15 @@ source). Nothing breaks, but the admin cannot observe the epic's central mechani
   destination, by type) so the classifier's live output is observable, and (b) a **chain-location
   pollution** tile — count + sample of Restaurant/Hotel Things carrying a `google_place_id` + a
   recognized chain brand (the merge-into-brand candidates from #456's migration notes), ideally trended.
-- **Backend dependency:** one companion endpoint — `GET /metrics/places/entity-kind` (aggregate) +
-  chain-location candidate count/sample. **Filed as tnats/listgem-platform#470** (backend · admin-portal
-  · place-identification). Admin render work starts once the shape lands; seeded-sample fallback until then.
-- **Effort:** M (admin) + backend.
+- **Backend dependency:** ✅ `GET /metrics/places/entity-kind` shipped (tnats/listgem-platform#470/#471).
+  Key result: `entity_kind` is **derived** (not persisted — seeded Wikidata catalog never ran the
+  classifier, defaults to `destination`), and `chain_location_candidates.total = 0` on prod — **zero**
+  seeded Places carry a `google_place_id`, so there is no chain-location pollution and the #462 prune
+  stays deferred with data. Contract documented in `CLAUDE-SHARED.md` "Place entity_kind monitor".
+- **Built:** `/places` page (`src/pages/places/`), hook `usePlacesEntityKind`, nav under Registry.
+  Renders entity_kind distribution bar + by-type cross-tab + chain-location panel; derived-caveat
+  callout; seeded-sample fallback. Lint + build + SSR smoke-render verified.
+- **Effort:** M (admin) + backend — both done.
 
 ### B3 · Taxonomy-drift panel (optional)
 - **Source:** #441 (VisualArtwork/Painting contradiction + 24 drifted `parent_type` rows); #456 taxonomy prune.

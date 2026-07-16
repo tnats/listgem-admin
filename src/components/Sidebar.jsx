@@ -17,6 +17,7 @@ const NAV_SECTIONS = [
       { to: '/labeling', label: 'Golden-Set Labeling' },
       { to: '/entities', label: 'Entity Browser' },
       { to: '/er-queue', label: 'ER Review Queue' },
+      { to: '/places', label: 'Places Monitor' },
     ],
   },
   {

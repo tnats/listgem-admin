@@ -216,6 +216,15 @@ export function useScorecardHistory() {
   });
 }
 
+// --- Places monitor (entity_kind distribution + chain-location signal, #470) ---
+export function usePlacesEntityKind() {
+  return useQuery({
+    queryKey: ['metrics', 'places-entity-kind'],
+    queryFn: () => client.get('/metrics/places/entity-kind').then(r => r.data),
+    staleTime: 60_000,
+  });
+}
+
 // --- Type Rules ---
 export function useTypeRules() {
   return useQuery({
