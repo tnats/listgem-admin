@@ -338,10 +338,11 @@ export function useErQueueMutations() {
 }
 
 // --- Extraction triage (#407) ---
-export function useLowQualityThings({ limit = 200, minQuality = 0.5 } = {}) {
+export function useLowQualityThings({ limit = 200, minQuality = 0.5, issue, enabled = true } = {}) {
   return useQuery({
-    queryKey: ['metrics', 'low-quality-things', limit, minQuality],
-    queryFn: () => client.get('/metrics/low-quality-things', { params: { limit, minQuality } }).then(r => r.data),
+    queryKey: ['metrics', 'low-quality-things', limit, minQuality, issue || null],
+    queryFn: () => client.get('/metrics/low-quality-things', { params: { limit, minQuality, issue } }).then(r => r.data),
+    enabled,
     staleTime: 60_000,
     retry: false, // fall back to the seeded sample when unreachable
   });
@@ -352,6 +353,16 @@ export function useReEnrich() {
   return useMutation({
     mutationFn: (thingId) => client.post(`/admin/re-enrich/${thingId}`).then(r => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['metrics', 'low-quality-things'] }),
+  });
+}
+
+// Read-only quality-tail re-enrich sweep status (#473) — manual CLI, no controls.
+export function useReEnrichSweepStatus() {
+  return useQuery({
+    queryKey: ['admin', 're-enrich-sweep-status'],
+    queryFn: () => client.get('/admin/re-enrich/sweep/status').then(r => r.data),
+    staleTime: 30_000,
+    retry: false,
   });
 }
 

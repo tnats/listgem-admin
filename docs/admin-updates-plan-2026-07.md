@@ -96,12 +96,16 @@ source). Nothing breaks, but the admin cannot observe the epic's central mechani
 
 ## P2 — Quality surfaces the new fixes make observable
 
-### C1 · Triage: mistyped-Person / non-content-type issue category
+### C1 · Triage: mistyped-Person / non-content-type issue category — ✅ DONE
 - **Source:** #442 (article byline extracted as Person Thing), #429 (Person floods type-implied search).
-- **Change:** add a "mistyped Person" category to the triage `issue_breakdown` so re-enrich can target them.
-- **Backend dependency:** classify/emit the category on `/metrics/low-quality-things` — **filed
-  tnats/listgem-platform#472** (backend · admin-portal · epic:entity-resolution). Admin render follows.
-- **Effort:** S (+ backend).
+- **Backend:** ✅ live — `#472` shipped; `/metrics/low-quality-things` `issue_breakdown` includes
+  `person_as_content`, and `?issue=person_as_content` returns the rows (contracts handed off in #476).
+- **Built:** a `person-as-content` chip on Triage. Because it's **quality-independent** (wrong-type, not
+  low-score), selecting it fetches server-side via `?issue=person_as_content` (not the quality<0.5 tail);
+  the chip's heuristic shows on hover; a context note explains "~0 today, lights up on regressions".
+  Reuses the existing per-item re-enrich. Seeded-sample rows + breakdown added for offline demo.
+- **Verified:** eslint, build, SSR smoke.
+- **Effort:** S — done.
 
 ### C2 · Search inspector: type-facet distribution view — ✅ DONE
 - **Source:** #429 — the relevance regression is only visible as a type distribution (Person 65% of "Best TV Series").
@@ -115,22 +119,24 @@ source). Nothing breaks, but the admin cannot observe the epic's central mechani
 
 ## P3 — New backend capabilities worth an admin control surface
 
-### D1 · Triage: quality-tail re-enrich sweep controls
-- **Source:** #420 — flag-gated background re-enrich sweep (kill switch, batches, worst-first).
-- **Change:** surface sweep status + batch progress + a trigger on the triage page (beyond the current per-item re-enrich).
-- **Backend dependency:** a sweep status/trigger endpoint — **filed tnats/listgem-platform#473**
-  (backend · admin-portal · epic:entity-resolution). Caveat filed: confirm #420's sweep actually shipped
-  vs. specced; admin panel holds behind "awaiting deploy" if not.
-- **Effort:** M (+ backend).
+### D1 · Triage: quality-tail re-enrich sweep panel — ✅ DONE (read-only)
+- **Source:** #420 — worst-first background re-enrich sweep.
+- **Backend:** ✅ live — `#473` shipped `GET /admin/re-enrich/sweep/status`. Hand-off clarified the sweep
+  is a **manual CLI, not a daemon** (`running: null`, `flag_name: null`) → **read-only panel, no kill
+  switch / start button** (correcting the original "controls" framing).
+- **Built:** a read-only sweep panel on Triage — progress (processed / pool), `avg_quality_delta`,
+  `last_run_at`, outcomes, "manual CLI" badge; `available:false` → "awaiting deploy". Seeded sample for demo.
+- **Verified:** eslint, build, SSR smoke (live + awaiting states).
+- **Effort:** M — done.
 
-### D2 · Image-quality page: dead-link + Commons-normalization metrics
-- **Source:** #424 — dead-link detection, Commons thumbnail normalization, `image_quality_score` decision.
-- **Change:** add broken/dead-image and normalized-coverage metrics to `ImageQualityPage`.
-- **Backend dependency:** the corresponding fields on the image analytics endpoints — **filed
-  tnats/listgem-platform#474** (backend · admin-portal). Caveat filed: #424's dead-link detection (item 4)
-  was "never implemented" — may need building, not just exposing; suggested split (ship
-  `commons_normalized_pct` now, track broken-image against the sweep work).
-- **Effort:** S–M (+ backend).
+### D2 · Image-quality page: dead-link + Commons-normalization metrics — ✅ DONE
+- **Source:** #424 — dead-link detection, Commons thumbnail normalization.
+- **Backend:** ✅ live — `#474` extended `/admin/analytics/image-quality` with `broken_image` (+ per-type
+  `broken`), `last_dead_link_scan_at`, `commons_total`, `commons_normalized_pct` (contracts in #476).
+- **Built:** a "Broken Images" stat card (starts at 0, fills as the daily sweep runs), a Commons
+  normalization bar (100% "done" today), and a per-type Broken column on the coverage table.
+- **Verified:** eslint, build, SSR smoke (seeded payload).
+- **Effort:** S–M — done.
 
 ---
 

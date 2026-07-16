@@ -18,6 +18,12 @@ function coverageBg(value) {
   return 'bg-red-500';
 }
 
+function fmtDate(v) {
+  if (!v) return '—';
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
+}
+
 export default function ImageQualityPage() {
   const { data, isLoading, error } = useImageQuality();
 
@@ -35,15 +41,24 @@ export default function ImageQualityPage() {
 
   const coveragePct = parseFloat(imageCoverage) || 0;
 
+  // Image rot + Commons normalization (#424 / #474). broken_image starts at 0
+  // and fills in as the daily dead-link sweep runs; commons_normalized_pct is a
+  // "done" bar (100% today).
+  const brokenImage = data?.broken_image ?? 0;
+  const lastDeadScan = data?.last_dead_link_scan_at;
+  const commonsTotal = data?.commons_total;
+  const commonsPct = data?.commons_normalized_pct;
+  const hasCommons = commonsPct != null;
+
   return (
     <>
       <PageHeader
         title="Image Quality"
-        description="Image coverage across the registry — missing images, ranked gaps, and per-type breakdown"
+        description="Image coverage across the registry — missing images, ranked gaps, broken-image rot, and Commons normalization"
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-4 gap-4 mb-6">
         <StatCard
           label="Image Coverage"
           value={imageCoverage !== '—' ? imageCoverage : '—'}
@@ -59,7 +74,36 @@ export default function ImageQualityPage() {
           value={rankedMissing.toLocaleString()}
           detail="Visible on consensus pages"
         />
+        <StatCard
+          label="Broken Images"
+          value={brokenImage.toLocaleString()}
+          detail={lastDeadScan ? `dead links · scanned ${fmtDate(lastDeadScan)}` : 'dead links · fills in as the sweep runs'}
+        />
       </div>
+
+      {/* Commons normalization (#424) */}
+      {hasCommons && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-gray-700">
+              Commons thumbnail normalization
+              {commonsTotal != null && <span className="text-gray-400 font-normal"> · {Number(commonsTotal).toLocaleString()} URLs</span>}
+            </h2>
+            {parseFloat(commonsPct) >= 100 && (
+              <span className="text-xs font-medium text-green-700 bg-green-50 px-1.5 py-0.5 rounded">done</span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-4 bg-gray-100 rounded overflow-hidden">
+              <div className={`h-full rounded ${coverageBg(commonsPct)}`} style={{ width: `${Math.min(parseFloat(commonsPct) || 0, 100)}%` }} />
+            </div>
+            <span className={`text-sm font-medium tabular-nums ${coverageColor(commonsPct)}`}>
+              {typeof commonsPct === 'number' ? `${commonsPct.toFixed(1)}%` : commonsPct}
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-gray-400">Wikimedia Commons originals rewritten to <code>https</code> + a width param (CDN thumbnail) — page-weight win on card tiles.</p>
+        </div>
+      )}
 
       {/* Coverage bar */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
@@ -94,6 +138,7 @@ export default function ImageQualityPage() {
                   <th className="text-left pb-2">Type</th>
                   <th className="text-right pb-2">Total</th>
                   <th className="text-right pb-2">Missing</th>
+                  <th className="text-right pb-2">Broken</th>
                   <th className="text-right pb-2">Coverage</th>
                   <th className="pb-2 pl-4 w-32"></th>
                 </tr>
@@ -108,6 +153,11 @@ export default function ImageQualityPage() {
                       <td className="py-1.5 text-right tabular-nums">
                         <span className={t.missing > 0 ? 'text-red-500' : 'text-gray-400'}>
                           {t.missing}
+                        </span>
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums">
+                        <span className={t.broken > 0 ? 'text-amber-600' : 'text-gray-300'}>
+                          {t.broken ?? 0}
                         </span>
                       </td>
                       <td className="py-1.5 text-right tabular-nums">
