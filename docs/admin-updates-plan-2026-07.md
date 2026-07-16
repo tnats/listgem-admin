@@ -80,13 +80,17 @@ source). Nothing breaks, but the admin cannot observe the epic's central mechani
   callout; seeded-sample fallback. Lint + build + SSR smoke-render verified.
 - **Effort:** M (admin) + backend — both done.
 
-### B3 · Taxonomy-drift panel (optional)
+### B3 · Taxonomy Health panel (optional) — ✅ BUILT (partial)
 - **Source:** #441 (VisualArtwork/Painting contradiction + 24 drifted `parent_type` rows); #456 taxonomy prune.
-- **Note:** the original "route type enums through `/admin/type-rules`" ask is largely already satisfied
-  — filters are data-driven and the endpoint exists. Remaining value is a small **taxonomy-drift panel**
-  (drifted `parent_type` count, retired-type sightings) on the Pipeline or a settings page.
-- **Backend dependency:** a drift count on `/admin/type-rules` (or a small `/metrics/taxonomy-drift`).
-- **Effort:** S. **Downgraded to P2** — nice-to-have, not epic-critical.
+- **Built:** a **Taxonomy Health** panel on the Pipeline page. The **retired-type sightings** half is fully
+  live with no backend dependency — computed client-side from `/metrics/quality-by-type` per-type counts,
+  flagging any of the #456-retired commodity types (Cafe/Gym/Bar/Store) that still carry Things
+  (`curation-clean` when all zero). Verified: eslint, build, SSR smoke (awaiting/clean/polluted states).
+- **Still pending backend:** the **parent-type drift** count (#441's 24 rows) needs a server-side field —
+  the panel reads `quality_by_type.parent_type_drift` / `drift_count` defensively and shows "awaiting
+  backend drift count" until then. **Not yet filed** — a small `/metrics/quality-by-type` field or
+  `/metrics/taxonomy-drift` ask; file if the drift number is wanted live.
+- **Effort:** S — done (retired-type half); drift half awaits a backend field.
 
 ---
 
