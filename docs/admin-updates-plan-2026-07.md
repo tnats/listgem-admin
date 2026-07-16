@@ -95,7 +95,8 @@ source). Nothing breaks, but the admin cannot observe the epic's central mechani
 ### C1 · Triage: mistyped-Person / non-content-type issue category
 - **Source:** #442 (article byline extracted as Person Thing), #429 (Person floods type-implied search).
 - **Change:** add a "mistyped Person" category to the triage `issue_breakdown` so re-enrich can target them.
-- **Backend dependency:** classify/emit the category on `/metrics/low-quality-things`.
+- **Backend dependency:** classify/emit the category on `/metrics/low-quality-things` — **filed
+  tnats/listgem-platform#472** (backend · admin-portal · epic:entity-resolution). Admin render follows.
 - **Effort:** S (+ backend).
 
 ### C2 · Search inspector: type-facet distribution view — ✅ DONE
@@ -113,13 +114,18 @@ source). Nothing breaks, but the admin cannot observe the epic's central mechani
 ### D1 · Triage: quality-tail re-enrich sweep controls
 - **Source:** #420 — flag-gated background re-enrich sweep (kill switch, batches, worst-first).
 - **Change:** surface sweep status + batch progress + a trigger on the triage page (beyond the current per-item re-enrich).
-- **Backend dependency:** a sweep status/trigger endpoint.
+- **Backend dependency:** a sweep status/trigger endpoint — **filed tnats/listgem-platform#473**
+  (backend · admin-portal · epic:entity-resolution). Caveat filed: confirm #420's sweep actually shipped
+  vs. specced; admin panel holds behind "awaiting deploy" if not.
 - **Effort:** M (+ backend).
 
 ### D2 · Image-quality page: dead-link + Commons-normalization metrics
 - **Source:** #424 — dead-link detection, Commons thumbnail normalization, `image_quality_score` decision.
 - **Change:** add broken/dead-image and normalized-coverage metrics to `ImageQualityPage`.
-- **Backend dependency:** the corresponding fields on the image analytics endpoints.
+- **Backend dependency:** the corresponding fields on the image analytics endpoints — **filed
+  tnats/listgem-platform#474** (backend · admin-portal). Caveat filed: #424's dead-link detection (item 4)
+  was "never implemented" — may need building, not just exposing; suggested split (ship
+  `commons_normalized_pct` now, track broken-image against the sweep work).
 - **Effort:** S–M (+ backend).
 
 ---
