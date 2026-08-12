@@ -3,10 +3,12 @@ import PageHeader from '../../components/PageHeader';
 import ReportQueue from './ReportQueue';
 import UserManagement from './UserManagement';
 import FeaturedList from './FeaturedList';
+import VerificationTool from './VerificationTool';
 
 const TABS = [
   { id: 'reports', label: 'Report Queue' },
   { id: 'users', label: 'Users' },
+  { id: 'verification', label: 'Verification' },
   { id: 'featured', label: 'Featured List' },
 ];
 
@@ -15,7 +17,7 @@ export default function ModerationPage() {
 
   return (
     <>
-      <PageHeader title="Moderation" description="Content reports, user management, and featured list" />
+      <PageHeader title="Moderation" description="Content reports, user management, verification, and featured list" />
 
       <div className="flex gap-1 mb-6 border-b border-gray-200">
         {TABS.map(t => (
@@ -35,6 +37,7 @@ export default function ModerationPage() {
 
       {tab === 'reports' && <ReportQueue />}
       {tab === 'users' && <UserManagement />}
+      {tab === 'verification' && <VerificationTool />}
       {tab === 'featured' && <FeaturedList />}
     </>
   );

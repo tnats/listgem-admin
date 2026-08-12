@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import StatusBadge from '../../components/StatusBadge';
-import { useAdminUsers } from '../../api/hooks';
+import VerifiedBadge from '../../components/VerifiedBadge';
+import { useAdminUsers, useVerifiedUsers } from '../../api/hooks';
 import client from '../../api/client';
+import VerifyModal from './VerifyModal';
 
 export default function UserManagement() {
   const [search, setSearch] = useState('');
@@ -13,6 +15,14 @@ export default function UserManagement() {
   const users = data?.users || [];
   const total = data?.total || 0;
   const totalPages = Math.ceil(total / limit);
+
+  // Verification state, decorated onto the rows: /admin/users doesn't carry a
+  // `verified` object, so the verified registry is fetched once and joined here.
+  const { data: verifiedData, refetch: refetchVerified } = useVerifiedUsers({ limit: 200 });
+  const verifiedById = new Map(
+    (verifiedData?.users || verifiedData?.verified || []).map(u => [u.user_id, u.verified]),
+  );
+  const [verifyModal, setVerifyModal] = useState(null); // { mode, user }
 
   // Action modal state
   const [modal, setModal] = useState(null); // { type, user }
@@ -97,6 +107,7 @@ export default function UserManagement() {
                 <th className="pb-2">Location</th>
                 <th className="pb-2 text-right">Followers</th>
                 <th className="pb-2">Role</th>
+                <th className="pb-2">Verified</th>
                 <th className="pb-2">Joined</th>
                 <th className="pb-2 text-right">Actions</th>
               </tr>
@@ -124,11 +135,30 @@ export default function UserManagement() {
                     {user.is_moderator && <StatusBadge status="moderator" />}
                     {!user.is_admin && !user.is_moderator && <span className="text-xs text-gray-400">user</span>}
                   </td>
+                  <td className="py-2">
+                    {/* Absent/null verification renders nothing — never a tombstone. */}
+                    <VerifiedBadge verified={user.verified || verifiedById.get(user.user_id)} />
+                  </td>
                   <td className="py-2 text-gray-400 text-xs">
                     {new Date(user.created_at).toLocaleDateString()}
                   </td>
                   <td className="py-2 text-right">
                     <div className="flex gap-1 justify-end">
+                      {(user.verified || verifiedById.get(user.user_id)) ? (
+                        <button
+                          onClick={() => setVerifyModal({ mode: 'unverify', user })}
+                          className="px-2 py-0.5 text-xs bg-gray-50 text-gray-600 rounded hover:bg-gray-100"
+                        >
+                          Unverify
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setVerifyModal({ mode: 'verify', user })}
+                          className="px-2 py-0.5 text-xs bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100"
+                        >
+                          Verify
+                        </button>
+                      )}
                       <button
                         onClick={() => { setModal({ type: 'warn', user }); setReason(''); }}
                         className="px-2 py-0.5 text-xs bg-yellow-50 text-yellow-600 rounded hover:bg-yellow-100"
@@ -230,6 +260,17 @@ export default function UserManagement() {
           </div>
         </div>
       )}
+
+      <VerifyModal
+        open={!!verifyModal}
+        mode={verifyModal?.mode}
+        user={verifyModal?.user}
+        onClose={() => setVerifyModal(null)}
+        onDone={() => {
+          refetchVerified();
+          refetch();
+        }}
+      />
     </>
   );
 }
