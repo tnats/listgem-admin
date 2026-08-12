@@ -63,24 +63,40 @@ All three inferences were wrong. Verified live and corrected:
 | `POST /resolve/batch` body | `{ items: [{ position, raw_text }] }` | `{ candidates: [{ type, title }] }` |
 | Verdict vocabulary | `resolved` / `ambiguous` | `found_existing`, `no_match` (mapped in `SERVER_STATUS`) |
 | Alternates | `candidates` / `matches` | **`suggestions`** |
-| `thing_type` source | `/admin/type-rules` | Not a type vocabulary — 355 crawler URL-pattern rules on `detected_type`, still carrying retired types (Gym, Cafe, Bar, Store). The select uses a curated list |
+| `thing_type` source | `/admin/type-rules` | Not a type vocabulary — 355 crawler URL-pattern rules on `detected_type`. The canonical list is **`GET /types`** |
 
 Two consequences worth keeping in mind:
 
-- **Every resolve needs a type.** `/imports/parse` returns `inferred_type`, usually `null`, so the builder
-  falls back to the pitch's own `thing_type`. A pitch whose list mixes types will resolve the odd ones out
-  under the wrong type — a per-row type override is the obvious follow-up if that shows up in practice.
-- **`suggestions` must never be auto-adopted.** A `no_match` frequently ships exactly one suggestion.
-  Promoting it would turn "we could not match this" into a silent, wrong link, so a lone candidate is only
-  adopted when the server returned no verdict of its own. Pinned by a test.
+- **Every resolve needs a type**, and the builder uses the pitch's own `thing_type`. That is correct rather
+  than a compromise: `lists.thing_type` is NOT NULL and single-valued, and the trigger
+  `validate_thing_type_match` (migration 067) enforces upward-only matching, so a genuinely mixed list
+  cannot exist. Two pitches, not one. `inferred_type` from `/imports/parse` is the caller's hint echoed
+  back — the parser never guesses per item — so it is only non-null for rows rebuilt from saved items,
+  where it carries `thing_type_actual`.
+- **`suggestions` must never be auto-adopted.** A `no_match` frequently ships exactly one suggestion,
+  because the matcher is k-NN and the nearest thing to an unmatched title is usually one plausible-looking
+  neighbour. `status` is the verdict; `suggestions` never is. Promoting it would turn "we could not match
+  this" into a wrong link on a list we pitched to a real person. A lone candidate is adopted only when the
+  server returned no verdict of its own. Pinned by a test.
 
 Saved items are shaped differently again: no nested `thing`, with the resolved entity in `thing_metadata`
 (title/year) and the type in `thing_type_actual`, ordered by `position`. Reading a top-level `title` left
 every resolved row showing "—".
 
-**Open question for the backend:** `/resolve` has no URL path, so the builder's add-by-URL control was
-removed. If the web app's add-flow accepts URLs it must go through a different endpoint — worth asking
-before rebuilding that affordance.
+**Add-by-URL is deliberately absent.** `/resolve` is a text resolver with no URL path. The web app's
+add-by-URL uses `POST /ingestion/pre-flight`, which fetches and extracts the page — built for the
+interactive one-URL-at-a-time flow, rate-limited and Redis-cached for that shape. Doing it here would mean
+`pre-flight` → take the extracted title → `/resolve`, two calls per row. That's a feature, not wiring;
+the backend offered a single combined endpoint if staff hit a real need for it.
+(`GET /things/by-url` is *not* the answer — it's an exact lookup against Things already in the registry.)
+
+**The type picker** reads `GET /types` (96 entries, public, no auth) — the same vocabulary
+`isValidThingType()` validates against, so it cannot offer a type `POST /pitches` rejects. Two wrinkles:
+the endpoint still returns the four retired types (`Cafe`, `Gym`, `Bar`, `Store`) with `supported: true`
+and counts of 1–2, so they are filtered via `src/taxonomy.js` — offering them would manufacture the drift
+the Taxonomy Health panel (#456) exists to detect. And it excludes five abstract parents that
+`isValidThingType()` accepts, which is divergence in the safe direction. Options sort by `count`, deepest
+registry first. There is no free-text escape hatch: with a live vocabulary, free text can only 400.
 
 `/imports/parse` failures fall back to splitting pasted text one item per line, so a build can still
 proceed by hand.

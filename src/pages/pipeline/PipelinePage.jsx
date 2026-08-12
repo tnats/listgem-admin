@@ -4,9 +4,10 @@ import StatCard from '../../components/StatCard';
 import StatusBadge from '../../components/StatusBadge';
 import { useCrawlAnalytics, useRegistrySearch, useTypeRules, useQueueStats, useQualityByType } from '../../api/hooks';
 import client from '../../api/client';
+import { RETIRED_THING_TYPES } from '../../taxonomy';
 
 // Commodity types retired by #456 ("curation, not directory") — should be empty.
-const RETIRED_TYPES = ['Cafe', 'Gym', 'Bar', 'Store'];
+const RETIRED_TYPES = RETIRED_THING_TYPES;
 
 export default function PipelinePage() {
   const { data: crawls } = useCrawlAnalytics();

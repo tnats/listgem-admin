@@ -458,6 +458,19 @@ export function useResolveBatch() {
   });
 }
 
+// Canonical registry vocabulary — 96 types, public, no auth. This is what
+// isValidThingType() validates against, so a picker driven from it cannot offer
+// a type POST /pitches rejects. NOT /admin/type-rules, which is crawler
+// URL-pattern detection keyed on `detected_type`.
+export function useThingTypes() {
+  return useQuery({
+    queryKey: ['types'],
+    queryFn: () => client.get('/types').then(r => r.data),
+    staleTime: 300_000,
+    retry: false,
+  });
+}
+
 // --- Verification (#435) ---
 export function useVerifiedUsers({ type = '', limit = 50, offset = 0 } = {}) {
   return useQuery({

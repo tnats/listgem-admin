@@ -1,11 +1,31 @@
 import { useState } from 'react';
 import Modal from '../../components/Modal';
 import { Button, Field, Select, TextArea, TextInput } from '../../components/Form';
-import { usePitchMutations } from '../../api/hooks';
+import { usePitchMutations, useThingTypes } from '../../api/hooks';
 import { apiErrorMessage } from '../../api/errors';
-import { THING_TYPES, hasErrors, intakeErrors } from './pitchRules';
+import { RETIRED_THING_TYPES } from '../../taxonomy';
+import { FALLBACK_THING_TYPES, hasErrors, intakeErrors } from './pitchRules';
 
-const OTHER = '__other__';
+/**
+ * Options from the canonical vocabulary, retired types removed, deepest first —
+ * `count` is registry depth, which is a fair proxy for how well a type will
+ * actually resolve in the builder.
+ */
+function typeOptions(live) {
+  const usable = (live || []).filter(t => t?.type && !RETIRED_THING_TYPES.includes(t.type));
+  if (usable.length === 0) {
+    return { options: FALLBACK_THING_TYPES.map(t => ({ value: t, label: t })), offline: true };
+  }
+  const options = [...usable]
+    .sort((a, b) => (b.count || 0) - (a.count || 0))
+    .map(t => ({
+      value: t.type,
+      label: `${t.icon ? `${t.icon} ` : ''}${t.display_name || t.type}${
+        t.count ? ` · ${t.count.toLocaleString()}` : ''
+      }`,
+    }));
+  return { options, offline: false };
+}
 
 const EMPTY = {
   target_name: '',
@@ -23,10 +43,11 @@ const EMPTY = {
 
 export default function IntakeModal({ open, onClose, onCreated }) {
   const [form, setForm] = useState(EMPTY);
-  const [typeChoice, setTypeChoice] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [apiError, setApiError] = useState(null);
   const { create } = usePitchMutations();
+  const { data: typesData } = useThingTypes();
+  const { options: typeOpts, offline: typesOffline } = typeOptions(typesData?.types);
 
   const errors = intakeErrors(form);
   const show = key => (submitted ? errors[key] : undefined);
@@ -34,7 +55,6 @@ export default function IntakeModal({ open, onClose, onCreated }) {
 
   function close() {
     setForm(EMPTY);
-    setTypeChoice('');
     setSubmitted(false);
     setApiError(null);
     onClose?.();
@@ -136,23 +156,19 @@ export default function IntakeModal({ open, onClose, onCreated }) {
 
       <div className="grid grid-cols-2 gap-x-4">
         <Field label="Thing type" required error={show('thing_type')} htmlFor="thing_type">
+          {/* No free-text escape hatch: with the live vocabulary, anything not on
+              this list can only produce a 400. */}
           <Select
             id="thing_type"
-            value={typeChoice}
+            value={form.thing_type}
             placeholder="Select a type…"
-            options={[...THING_TYPES.map(t => ({ value: t, label: t })), { value: OTHER, label: 'Other…' }]}
-            onChange={e => {
-              setTypeChoice(e.target.value);
-              set('thing_type', e.target.value === OTHER ? '' : e.target.value);
-            }}
+            options={typeOpts}
+            onChange={e => set('thing_type', e.target.value)}
           />
-          {typeChoice === OTHER && (
-            <TextInput
-              className="mt-2"
-              value={form.thing_type}
-              onChange={e => set('thing_type', e.target.value)}
-              placeholder="Exact registry type, e.g. Movie"
-            />
+          {typesOffline && (
+            <p className="mt-1 text-xs text-amber-700">
+              <code>/types</code> unreachable — showing a short offline list.
+            </p>
           )}
         </Field>
         <Field label="Category" htmlFor="category">
