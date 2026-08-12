@@ -7,7 +7,11 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: Object.fromEntries(
-      ['/auth', '/admin', '/metrics', '/moderation', '/queue-stats', '/feed'].map(
+      [
+        '/auth', '/admin', '/metrics', '/moderation', '/queue-stats', '/feed',
+        // Concierge + verification (#533)
+        '/pitches', '/verification', '/resolve', '/imports',
+      ].map(
         (path) => [
           path,
           {
@@ -23,5 +27,13 @@ export default defineConfig({
         ],
       ),
     ),
+  },
+  test: {
+    // jsdom is pinned to ^26: 27 pulls a CJS→ESM require chain that needs
+    // Node ≥20.19 (dev is on 20.18).
+    environment: 'jsdom',
+    globals: true,
+    include: ['src/**/*.test.{js,jsx}'],
+    restoreMocks: true,
   },
 })
