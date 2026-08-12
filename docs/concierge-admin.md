@@ -52,20 +52,35 @@ Each one is enforced by the API too — the UI's job is to never offer the actio
 Plus: items are frozen once `provisioned`/`archived` (`canEditItems`), and tokens can't be re-issued after
 a claim, a decline, or a takedown (`tokenIssueBlockedReason`).
 
-## Assumptions worth confirming against the live API
+## The resolve contract, confirmed against prod (2026-08-12)
 
-The issue pins `/pitches` and `/verification` exactly; these three are inferred and read defensively, so a
-mismatch degrades rather than crashes. Worth a look on first live use:
+#533 pins `/pitches` and `/verification` exactly but not the resolve path, so the first build inferred it.
+All three inferences were wrong. Verified live and corrected:
 
-1. **`/resolve` and `/resolve/batch` response shape.** The issue says batch elements are "`/resolve`'s
-   response plus `index`" without giving that shape. `resolveAdapter.normalizeResolution` accepts
-   `status`/`resolution_status`, `thing_id`/`thing`/`match`, and `candidates`/`matches`/`results`, and
-   derives a status when none is sent. A row is never marked `resolved` without a `thing_id`.
-2. **`/resolve/batch` request shape.** Sent as `{ items: [{ position, raw_text }] }` — the shape
-   `/imports/parse` returns.
-3. **`thing_type` vocabulary.** The intake select prefers live `/admin/type-rules`; when that yields fewer
-   than three distinct types it falls back to a PascalCase list in `pitchRules.FALLBACK_THING_TYPES`, with
-   an "Other…" free-text escape hatch. `POST /pitches` 400s on an invalid type.
+| | Inferred | Actual |
+|---|---|---|
+| `POST /resolve` body | `{ raw_text }` | `{ type, title }` — **`type` is required**, and a URL is not accepted at all |
+| `POST /resolve/batch` body | `{ items: [{ position, raw_text }] }` | `{ candidates: [{ type, title }] }` |
+| Verdict vocabulary | `resolved` / `ambiguous` | `found_existing`, `no_match` (mapped in `SERVER_STATUS`) |
+| Alternates | `candidates` / `matches` | **`suggestions`** |
+| `thing_type` source | `/admin/type-rules` | Not a type vocabulary — 355 crawler URL-pattern rules on `detected_type`, still carrying retired types (Gym, Cafe, Bar, Store). The select uses a curated list |
+
+Two consequences worth keeping in mind:
+
+- **Every resolve needs a type.** `/imports/parse` returns `inferred_type`, usually `null`, so the builder
+  falls back to the pitch's own `thing_type`. A pitch whose list mixes types will resolve the odd ones out
+  under the wrong type — a per-row type override is the obvious follow-up if that shows up in practice.
+- **`suggestions` must never be auto-adopted.** A `no_match` frequently ships exactly one suggestion.
+  Promoting it would turn "we could not match this" into a silent, wrong link, so a lone candidate is only
+  adopted when the server returned no verdict of its own. Pinned by a test.
+
+Saved items are shaped differently again: no nested `thing`, with the resolved entity in `thing_metadata`
+(title/year) and the type in `thing_type_actual`, ordered by `position`. Reading a top-level `title` left
+every resolved row showing "—".
+
+**Open question for the backend:** `/resolve` has no URL path, so the builder's add-by-URL control was
+removed. If the web app's add-flow accepts URLs it must go through a different endpoint — worth asking
+before rebuilding that affordance.
 
 `/imports/parse` failures fall back to splitting pasted text one item per line, so a build can still
 proceed by hand.

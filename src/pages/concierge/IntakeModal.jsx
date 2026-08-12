@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import Modal from '../../components/Modal';
 import { Button, Field, Select, TextArea, TextInput } from '../../components/Form';
-import { usePitchMutations, useTypeRules } from '../../api/hooks';
+import { usePitchMutations } from '../../api/hooks';
 import { apiErrorMessage } from '../../api/errors';
-import { FALLBACK_THING_TYPES, hasErrors, intakeErrors } from './pitchRules';
+import { THING_TYPES, hasErrors, intakeErrors } from './pitchRules';
 
 const OTHER = '__other__';
 
@@ -21,20 +21,12 @@ const EMPTY = {
   notes: '',
 };
 
-/** Live registry types when /admin/type-rules is reachable, else the fallback list. */
-function useThingTypes() {
-  const { data } = useTypeRules();
-  const live = [...new Set((data?.rules || []).map(r => r.thing_type || r.type).filter(Boolean))].sort();
-  return live.length >= 3 ? live : FALLBACK_THING_TYPES;
-}
-
 export default function IntakeModal({ open, onClose, onCreated }) {
   const [form, setForm] = useState(EMPTY);
   const [typeChoice, setTypeChoice] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [apiError, setApiError] = useState(null);
   const { create } = usePitchMutations();
-  const thingTypes = useThingTypes();
 
   const errors = intakeErrors(form);
   const show = key => (submitted ? errors[key] : undefined);
@@ -148,7 +140,7 @@ export default function IntakeModal({ open, onClose, onCreated }) {
             id="thing_type"
             value={typeChoice}
             placeholder="Select a type…"
-            options={[...thingTypes.map(t => ({ value: t, label: t })), { value: OTHER, label: 'Other…' }]}
+            options={[...THING_TYPES.map(t => ({ value: t, label: t })), { value: OTHER, label: 'Other…' }]}
             onChange={e => {
               setTypeChoice(e.target.value);
               set('thing_type', e.target.value === OTHER ? '' : e.target.value);

@@ -3,10 +3,22 @@
 // same endpoints, different job: a curator resolves one ambiguity mid-import,
 // staff bulk-adjudicate fifty rows at once.
 //
-// Response shapes are read defensively: /resolve is the web app's add-flow
-// endpoint, and this surface should degrade to "unresolved, search it by hand"
-// rather than crash if a field is named differently than expected. That is why
-// the inputs here are `unknown` and the outputs are strict.
+// Shapes below are the ones prod actually returns, confirmed 2026-08-12 against
+// listgem-platform-production. Inputs stay `unknown` and outputs strict so the
+// surface degrades to "unresolved, search it by hand" rather than crashing, but
+// the field names are no longer guesses:
+//
+//   POST /imports/parse  { text }
+//     -> { success, candidates: [{ position, raw_text, inferred_type }], … }
+//        (position is 0-based)
+//   POST /resolve        { type, title|name }        <- type is REQUIRED
+//     -> { status, match, confidence, reason, suggestions[] }
+//   POST /resolve/batch  { candidates: [{ type, title }] }
+//     -> { results: [{ index, status, match, confidence, reason, suggestions[] }],
+//          count, resolved_count, pending_count, timed_out, took_ms }
+//
+// `suggestions` is the alternates list — on a `no_match` it is what the operator
+// picks from, so it must never be auto-adopted as the resolution.
 
 export const BATCH_LIMIT = 200; // one rate-limit unit per call
 
@@ -36,6 +48,10 @@ export interface BuilderRow {
   match: Candidate | null;
   note: string;
   dropped: boolean;
+  /** From /imports/parse; falls back to the pitch's thing_type when null. */
+  inferred_type: string | null;
+  confidence: number | null;
+  reason: string | null;
 }
 
 /** The part of a row that resolution owns. */
@@ -44,11 +60,20 @@ export interface Resolution {
   thing_id: string | null;
   match: Candidate | null;
   candidates: Candidate[];
+  confidence: number | null;
+  reason: string | null;
 }
 
 export interface ParsedCandidate {
   position: number;
   raw_text: string;
+  inferred_type: string | null;
+}
+
+/** POST /resolve and each element of /resolve/batch's `candidates`. */
+export interface ResolveRequest {
+  type: string;
+  title: string;
 }
 
 /** PUT /pitches/:id/items element. `resolution_status` is only ever these two. */
@@ -81,6 +106,25 @@ export const ROW_STATUS: Record<RowStatus, StatusSpec> = {
 export function isRowStatus(value: unknown): value is RowStatus {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(ROW_STATUS, value);
 }
+
+/**
+ * The server's verdict vocabulary, mapped onto the four the builder shows.
+ * `found_existing` and `no_match` are what prod returns today; the rest are
+ * accepted so a new verdict name doesn't silently read as "unresolved".
+ */
+const SERVER_STATUS: Record<string, RowStatus> = {
+  found_existing: 'resolved',
+  created_new: 'resolved',
+  matched: 'resolved',
+  exact: 'resolved',
+  resolved: 'resolved',
+  no_match: 'unresolved',
+  not_found: 'unresolved',
+  unresolved: 'unresolved',
+  ambiguous: 'ambiguous',
+  needs_review: 'ambiguous',
+  pending: 'pending',
+};
 
 function isObject(value: unknown): value is Loose {
   return typeof value === 'object' && value !== null;
@@ -120,36 +164,43 @@ export function normalizeCandidate(raw: unknown): Candidate | null {
  * unresolved.
  */
 export function normalizeResolution(raw: unknown): Resolution {
-  if (!isObject(raw)) {
-    return { status: 'unresolved', thing_id: null, candidates: [], match: null };
-  }
-  const candidateSource = Array.isArray(raw.candidates)
-    ? raw.candidates
-    : Array.isArray(raw.matches)
-      ? raw.matches
-      : Array.isArray(raw.results)
-        ? raw.results
-        : [];
+  const empty: Resolution = {
+    status: 'unresolved',
+    thing_id: null,
+    candidates: [],
+    match: null,
+    confidence: null,
+    reason: null,
+  };
+  if (!isObject(raw)) return empty;
+
+  const candidateSource = Array.isArray(raw.suggestions)
+    ? raw.suggestions
+    : Array.isArray(raw.candidates)
+      ? raw.candidates
+      : Array.isArray(raw.matches)
+        ? raw.matches
+        : Array.isArray(raw.results)
+          ? raw.results
+          : [];
   const candidates = candidateSource
     .map(normalizeCandidate)
     .filter((c): c is Candidate => c !== null);
 
   const match = normalizeCandidate(raw.thing || raw.match || raw.resolved || null);
-  const thingId =
-    firstString(raw.thing_id, match?.thing_id) ||
-    (candidates.length === 1 ? candidates[0].thing_id : null);
-
   const reported = firstString(raw.status, raw.resolution_status);
+  const mapped = reported ? SERVER_STATUS[reported] : undefined;
+  const explicitId = firstString(raw.thing_id, match?.thing_id);
+
+  // Promote a lone candidate ONLY when the server gave no verdict of its own.
+  // `no_match` ships one suggestion often — adopting it would turn "we couldn't
+  // match this" into a silent resolution.
+  const thingId = explicitId || (!mapped && candidates.length === 1 ? candidates[0].thing_id : null);
+
   let status: RowStatus;
-  if (reported === 'matched' || reported === 'exact') {
-    status = 'resolved';
-  } else if (isRowStatus(reported)) {
-    status = reported;
-  } else if (thingId) {
-    status = 'resolved';
-  } else {
-    status = candidates.length > 1 ? 'ambiguous' : 'unresolved';
-  }
+  if (mapped) status = mapped;
+  else if (thingId) status = 'resolved';
+  else status = candidates.length > 1 ? 'ambiguous' : 'unresolved';
   // A row with no thing_id is never "resolved", whatever the server called it.
   if (status === 'resolved' && !thingId) status = candidates.length > 1 ? 'ambiguous' : 'unresolved';
 
@@ -158,6 +209,8 @@ export function normalizeResolution(raw: unknown): Resolution {
     thing_id: thingId,
     match: match?.thing_id ? match : candidates.find(c => c.thing_id === thingId) || null,
     candidates,
+    confidence: typeof raw.confidence === 'number' ? raw.confidence : null,
+    reason: firstString(raw.reason),
   };
 }
 
@@ -172,8 +225,10 @@ export function normalizeParsed(data: unknown): ParsedCandidate[] {
     .map((c, i): ParsedCandidate => {
       const item = isObject(c) ? c : {};
       return {
+        // prod's positions are 0-based; only the ordering matters here.
         position: typeof item.position === 'number' ? item.position : i + 1,
         raw_text: firstString(item.raw_text, item.text, typeof c === 'string' ? c : null) || '',
+        inferred_type: firstString(item.inferred_type),
       };
     })
     .filter(c => c.raw_text.trim())
@@ -191,9 +246,20 @@ export function chunkForBatch(indices: number[], size: number = BATCH_LIMIT): nu
   return out;
 }
 
-/** Request body for POST /resolve/batch, in the parse output's shape. */
-export function toBatchPayload(rows: BuilderRow[], indices: number[]): ParsedCandidate[] {
-  return indices.map((rowIndex, i) => ({ position: i + 1, raw_text: rows[rowIndex].raw_text }));
+/**
+ * `candidates` for POST /resolve/batch. `type` is required per candidate, and
+ * the builder has no per-row type of its own — it uses the parser's
+ * `inferred_type` when there is one and the pitch's `thing_type` otherwise.
+ */
+export function toBatchPayload(
+  rows: BuilderRow[],
+  indices: number[],
+  fallbackType: string,
+): ResolveRequest[] {
+  return indices.map(rowIndex => ({
+    type: rows[rowIndex].inferred_type || fallbackType,
+    title: rows[rowIndex].raw_text,
+  }));
 }
 
 /** Unwrap the batch response container — array, `{ results }` or `{ items }`. */
@@ -275,26 +341,56 @@ export function rowsFromParsed(parsed: ParsedCandidate[]): BuilderRow[] {
     match: null,
     note: '',
     dropped: false,
+    inferred_type: p.inferred_type ?? null,
+    confidence: null,
+    reason: null,
   }));
 }
 
-/** Existing items from GET /pitches/:id, back into builder rows. */
+/**
+ * Existing items from GET /pitches/:id, back into builder rows.
+ *
+ * Saved items carry no nested `thing`: the resolved entity's details live in
+ * `thing_metadata` (title/year/poster_url) with the type in `thing_type_actual`.
+ * Reading only a top-level `title` leaves every resolved row showing "—".
+ * `position` is authoritative for ordering.
+ */
 export function rowsFromItems(items: unknown): BuilderRow[] {
-  return asArray(items).map((raw): BuilderRow => {
-    const it = isObject(raw) ? raw : {};
-    const thingId = firstString(it.thing_id);
-    return {
-      raw_text: firstString(it.raw_text, it.text) || '',
-      thing_id: thingId,
-      status: isRowStatus(it.resolution_status)
-        ? it.resolution_status
-        : thingId
-          ? 'resolved'
-          : 'unresolved',
-      candidates: [],
-      match: it.thing || it.title ? normalizeCandidate(it.thing || it) : null,
-      note: typeof it.note === 'string' ? it.note : '',
-      dropped: false,
-    };
-  });
+  return asArray(items)
+    .map(raw => (isObject(raw) ? raw : {}))
+    .slice()
+    .sort((a, b) => {
+      const pa = typeof a.position === 'number' ? a.position : 0;
+      const pb = typeof b.position === 'number' ? b.position : 0;
+      return pa - pb;
+    })
+    .map((it): BuilderRow => {
+      const thingId = firstString(it.thing_id);
+      const meta = isObject(it.thing_metadata) ? it.thing_metadata : null;
+      const nested = isObject(it.thing) ? it.thing : null;
+      const matchSource = nested || (meta || it.title ? { ...(meta || {}), ...it } : null);
+      const match = matchSource
+        ? normalizeCandidate({
+            ...matchSource,
+            thing_id: thingId,
+            type: firstString(it.thing_type_actual, (matchSource as Loose).type),
+          })
+        : null;
+      return {
+        raw_text: firstString(it.raw_text, it.text) || '',
+        thing_id: thingId,
+        status: isRowStatus(it.resolution_status)
+          ? it.resolution_status
+          : thingId
+            ? 'resolved'
+            : 'unresolved',
+        candidates: [],
+        match: match?.thing_id || match?.title !== '(untitled)' ? match : null,
+        note: typeof it.note === 'string' ? it.note : '',
+        dropped: false,
+        inferred_type: firstString(it.thing_type_actual),
+        confidence: null,
+        reason: null,
+      };
+    });
 }

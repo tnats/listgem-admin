@@ -442,6 +442,8 @@ export function useImportParse() {
   });
 }
 
+// Body is { type, title } — `type` is required, and a URL is NOT accepted
+// (confirmed against prod 2026-08-12; /resolve 400s on { url }).
 export function useResolve() {
   return useMutation({
     mutationFn: (body) => client.post('/resolve', body).then(r => r.data),
@@ -449,9 +451,10 @@ export function useResolve() {
 }
 
 // Up to 200 candidates for one rate-limit unit — always prefer this for a build.
+// The body key is `candidates`, each { type, title }.
 export function useResolveBatch() {
   return useMutation({
-    mutationFn: (items) => client.post('/resolve/batch', { items }).then(r => r.data),
+    mutationFn: (candidates) => client.post('/resolve/batch', { candidates }).then(r => r.data),
   });
 }
 

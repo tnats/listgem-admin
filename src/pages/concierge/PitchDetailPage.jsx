@@ -134,7 +134,10 @@ export default function PitchDetailPage() {
 
         <dl className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Detail label="Organisation">{pitch.target_org}</Detail>
-          <Detail label="Contact">{pitch.target_contact || <span className="text-gray-400">purged</span>}</Detail>
+          <Detail label="Contact">
+            {pitch.target_contact ||
+              (pitch.contact_purged_at ? <span className="text-gray-400">purged</span> : null)}
+          </Detail>
           <Detail label="Assigned to">{pitch.assigned_to}</Detail>
           <Detail label="Created by">{pitch.created_by}</Detail>
           <Detail label="Source">
@@ -196,6 +199,7 @@ export default function PitchDetailPage() {
       {tab === 'build' && (
         <PitchBuilder
           pitchId={pitchId}
+          thingType={pitch.thing_type}
           items={items}
           readOnly={!canEditItems(pitch)}
           readOnlyReason={

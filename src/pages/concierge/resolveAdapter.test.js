@@ -14,6 +14,89 @@ import {
   toItemsPayload,
 } from './resolveAdapter';
 
+// Trimmed from real prod responses, 2026-08-12.
+const PROD_FOUND = {
+  index: 0,
+  status: 'found_existing',
+  confidence: 1,
+  reason: null,
+  match: {
+    thing_id: 'movie_the_matrix_1999_14aa79a9',
+    type: 'Movie',
+    parent_type: 'CreativeWork',
+    title: 'The Matrix',
+    year: '1999',
+    image_url: 'https://image.tmdb.org/t/p/w500/x.jpg',
+  },
+  suggestions: [{ thing_id: 'movie_the_animatrix_2003_8bfc8e62', type: 'Movie', title: 'The Animatrix', year: '2003' }],
+};
+
+const PROD_NO_MATCH = {
+  index: 1,
+  status: 'no_match',
+  confidence: null,
+  reason: 'no_confident_match',
+  match: null,
+  suggestions: [{ thing_id: 'movie_xxxxxxxx_2023_5af3c660', type: 'Movie', title: 'Xxxxxxxx', year: '2023' }],
+};
+
+describe('the shapes prod actually returns', () => {
+  it('reads a found_existing result', () => {
+    const res = normalizeResolution(PROD_FOUND);
+    expect(res.status).toBe('resolved');
+    expect(res.thing_id).toBe('movie_the_matrix_1999_14aa79a9');
+    expect(res.match.title).toBe('The Matrix');
+    expect(res.confidence).toBe(1);
+  });
+
+  it('offers `suggestions` as the alternates list', () => {
+    expect(normalizeResolution(PROD_FOUND).candidates.map(c => c.title)).toEqual(['The Animatrix']);
+  });
+
+  it('never adopts a lone suggestion on no_match', () => {
+    // The server said it could not match this. One suggestion is an option for
+    // the operator, not a resolution — adopting it would silently invent a link.
+    const res = normalizeResolution(PROD_NO_MATCH);
+    expect(res.status).toBe('unresolved');
+    expect(res.thing_id).toBeNull();
+    expect(res.candidates).toHaveLength(1);
+    expect(res.reason).toBe('no_confident_match');
+  });
+
+  it('maps the batch envelope back onto rows', () => {
+    const rows = rowsFromParsed(normalizeParsed(['The Matrix', 'zzzz nonsense qqq']));
+    const next = applyBatchResults(rows, batchResults({ results: [PROD_FOUND, PROD_NO_MATCH], count: 2 }), [0, 1]);
+    expect(next.map(r => r.status)).toEqual(['resolved', 'unresolved']);
+  });
+
+  it('parses the real /imports/parse envelope, 0-based positions and all', () => {
+    const parsed = normalizeParsed({
+      success: true,
+      candidates: [
+        { position: 0, raw_text: 'The Matrix', inferred_type: null },
+        { position: 1, raw_text: 'Inception', inferred_type: 'Movie' },
+      ],
+      candidate_count: 2,
+      method: 'structured',
+    });
+    expect(parsed.map(p => p.raw_text)).toEqual(['The Matrix', 'Inception']);
+    expect(parsed[1].inferred_type).toBe('Movie');
+  });
+
+  it('builds /resolve/batch candidates with a type on every row', () => {
+    // `type` is required per candidate and the parser often sends none, so the
+    // pitch's thing_type has to fill in or the whole batch 400s.
+    const rows = rowsFromParsed([
+      { position: 0, raw_text: 'The Matrix', inferred_type: null },
+      { position: 1, raw_text: 'Slow Horses', inferred_type: 'TVSeries' },
+    ]);
+    expect(toBatchPayload(rows, [0, 1], 'Movie')).toEqual([
+      { type: 'Movie', title: 'The Matrix' },
+      { type: 'TVSeries', title: 'Slow Horses' },
+    ]);
+  });
+});
+
 describe('normalizeResolution', () => {
   it('takes the server status when it sends one', () => {
     expect(normalizeResolution({ status: 'pending' }).status).toBe('pending');
@@ -46,7 +129,14 @@ describe('normalizeResolution', () => {
   });
 
   it('survives junk', () => {
-    expect(normalizeResolution(null)).toEqual({ status: 'unresolved', thing_id: null, candidates: [], match: null });
+    expect(normalizeResolution(null)).toEqual({
+      status: 'unresolved',
+      thing_id: null,
+      candidates: [],
+      match: null,
+      confidence: null,
+      reason: null,
+    });
     expect(normalizeResolution({ candidates: 'nope' }).candidates).toEqual([]);
   });
 });
@@ -68,11 +158,11 @@ describe('batching', () => {
     expect(chunks.map(c => c.length)).toEqual([BATCH_LIMIT, BATCH_LIMIT, 50]);
   });
 
-  it('sends a batch payload in the parse output shape', () => {
+  it('sends a batch payload in the order the indices were given', () => {
     const rows = rowsFromParsed(normalizeParsed(['A', 'B', 'C']));
-    expect(toBatchPayload(rows, [2, 0])).toEqual([
-      { position: 1, raw_text: 'C' },
-      { position: 2, raw_text: 'A' },
+    expect(toBatchPayload(rows, [2, 0], 'Movie')).toEqual([
+      { type: 'Movie', title: 'C' },
+      { type: 'Movie', title: 'A' },
     ]);
   });
 
@@ -147,6 +237,34 @@ describe('rowsFromItems', () => {
     ]);
     expect(rows.map(r => r.status)).toEqual(['resolved', 'unresolved']);
     expect(rows.every(r => r.dropped === false)).toBe(true);
+  });
+
+  it('reads the title out of thing_metadata, where saved items keep it', () => {
+    // Real GET /pitches/:id item: no nested `thing`, no top-level title.
+    const [row] = rowsFromItems([
+      {
+        pitch_item_id: 7,
+        position: 0,
+        thing_id: 'movie_just_like_heaven_2005_02a65a22',
+        raw_text: 'Resolved item',
+        resolution_status: 'resolved',
+        note: null,
+        thing_type_actual: 'Movie',
+        thing_metadata: { year: '2005', title: 'Just Like Heaven', tmdb_id: 9007 },
+      },
+    ]);
+    expect(row.match.title).toBe('Just Like Heaven');
+    expect(row.match.year).toBe('2005');
+    expect(row.match.type).toBe('Movie');
+  });
+
+  it('orders by position, not by array order', () => {
+    const rows = rowsFromItems([
+      { position: 2, raw_text: 'third' },
+      { position: 0, raw_text: 'first' },
+      { position: 1, raw_text: 'second' },
+    ]);
+    expect(rows.map(r => r.raw_text)).toEqual(['first', 'second', 'third']);
   });
 
   it('handles a pitch with no items', () => {

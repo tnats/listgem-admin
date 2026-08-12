@@ -31,6 +31,10 @@ export interface Pitch {
   thing_type: string;
   category?: string | null;
   status: PitchStatus;
+  /** Set by takedown. Distinguishes "purged" from "never had a contact". */
+  contact_purged_at?: string | null;
+  /** Registry parent type of `thing_type`, e.g. CreativeWork. Read-only here. */
+  parent_type?: string | null;
   /** The server's re-pitch verdict. Never derive this from `status`. */
   can_repitch: boolean;
   invite_token?: string | null;
@@ -236,10 +240,15 @@ export function isExpired(expiresAt?: string | null, now: number = Date.now()): 
 }
 
 /**
- * Fallback registry types for the intake select. The live list comes from
- * /admin/type-rules when it's reachable; this keeps intake usable offline.
+ * Registry types offered by the intake select.
+ *
+ * Curated on purpose. /admin/type-rules is NOT a type vocabulary — it is 355
+ * crawler URL-pattern rules keyed on `detected_type`, and it still carries
+ * retired types (Gym, Cafe, Bar, Store). Driving the select from it would offer
+ * types the registry no longer accepts. The "Other…" escape hatch covers
+ * anything missing here; POST /pitches 400s on a type it doesn't know.
  */
-export const FALLBACK_THING_TYPES: string[] = [
+export const THING_TYPES: string[] = [
   'Movie',
   'TVSeries',
   'Book',

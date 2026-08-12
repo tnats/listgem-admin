@@ -38,7 +38,12 @@ function PitchCard({ pitch, onRepitch, busy }) {
 
       <div className="mt-2 space-y-0.5 text-[11px]">
         <div className="truncate text-gray-500">
-          {pitch.target_contact || <span className="text-gray-400">contact purged</span>}
+          {pitch.target_contact ||
+            (pitch.contact_purged_at ? (
+              <span className="text-gray-400">contact purged</span>
+            ) : (
+              <span className="text-gray-300">no contact</span>
+            ))}
         </div>
         {pitch.assigned_to && <div className="truncate text-gray-400">→ {pitch.assigned_to}</div>}
         {pitch.notes && <div className="line-clamp-2 text-gray-400">{pitch.notes}</div>}

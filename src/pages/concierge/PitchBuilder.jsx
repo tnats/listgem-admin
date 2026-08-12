@@ -60,7 +60,7 @@ function CandidateRow({ candidate, chosen, onPick }) {
  * endpoints, different job. A curator resolves one ambiguity mid-import; staff
  * bulk-adjudicate fifty rows, so this optimises for throughput.
  */
-export default function PitchBuilder({ pitchId, items, readOnly, readOnlyReason }) {
+export default function PitchBuilder({ pitchId, thingType, items, readOnly, readOnlyReason }) {
   const [rows, setRows] = useState(() => rowsFromItems(items));
   const [paste, setPaste] = useState('');
   const [showPaste, setShowPaste] = useState(() => rowsFromItems(items).length === 0);
@@ -70,7 +70,6 @@ export default function PitchBuilder({ pitchId, items, readOnly, readOnlyReason 
   const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState(null);
-  const [urlInput, setUrlInput] = useState('');
 
   const parse = useImportParse();
   const resolveBatch = useResolveBatch();
@@ -122,7 +121,7 @@ export default function PitchBuilder({ pitchId, items, readOnly, readOnlyReason 
       };
       try {
         for (const chunk of chunkForBatch(indices)) {
-          const data = await resolveBatch.mutateAsync(toBatchPayload(working, chunk));
+          const data = await resolveBatch.mutateAsync(toBatchPayload(working, chunk, thingType));
           commit(applyBatchResults(working, batchResults(data), chunk));
         }
         setDirty(true);
@@ -135,7 +134,7 @@ export default function PitchBuilder({ pitchId, items, readOnly, readOnlyReason 
           await new Promise(r => setTimeout(r, delay));
           if (cancelled.current) return;
           for (const chunk of chunkForBatch(stillPending)) {
-            const data = await resolveBatch.mutateAsync(toBatchPayload(working, chunk));
+            const data = await resolveBatch.mutateAsync(toBatchPayload(working, chunk, thingType));
             commit(applyBatchResults(working, batchResults(data), chunk));
           }
         }
@@ -145,7 +144,7 @@ export default function PitchBuilder({ pitchId, items, readOnly, readOnlyReason 
         setBusy(null);
       }
     },
-    [resolveBatch],
+    [resolveBatch, thingType],
   );
 
   async function parseAndResolve({ replace }) {
@@ -179,33 +178,20 @@ export default function PitchBuilder({ pitchId, items, readOnly, readOnlyReason 
     if (!query.trim()) return;
     setBusy('searching');
     try {
-      const data = await resolveOne.mutateAsync({ raw_text: query.trim() });
+      // /resolve requires a type; rows carry the parser's inferred_type when it
+      // sent one, otherwise the pitch's own thing_type.
+      const type = focusedRow?.inferred_type || thingType;
+      const data = await resolveOne.mutateAsync({ type, title: query.trim() });
       const res = normalizeResolution(data);
-      const list = res.candidates.length ? res.candidates : res.match ? [res.match] : [];
+      // The match leads, then the alternates — `suggestions` excludes the match
+      // itself, so showing only one or the other loses a real option.
+      const list = [res.match, ...res.candidates].filter(
+        (c, i, all) => c && all.findIndex(o => o?.thing_id === c.thing_id) === i,
+      );
       setSearchResults(list);
       if (list.length === 0) setNote({ ok: false, text: `No candidates for “${query.trim()}”.` });
     } catch (err) {
       setNote({ ok: false, text: `Search failed — ${apiErrorMessage(err)}` });
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function addByUrl(url) {
-    if (!url.trim()) return;
-    setBusy('searching');
-    try {
-      const res = normalizeResolution(await resolveOne.mutateAsync({ url: url.trim() }));
-      if (res.thing_id) {
-        patchRow(focus, { thing_id: res.thing_id, status: 'resolved', match: res.match, candidates: res.candidates });
-        setUrlInput('');
-        setNote({ ok: true, text: `Row ${focus + 1} resolved from URL.` });
-      } else {
-        setSearchResults(res.candidates);
-        setNote({ ok: false, text: 'URL did not resolve to a single thing — pick a candidate.' });
-      }
-    } catch (err) {
-      setNote({ ok: false, text: `Add by URL failed — ${apiErrorMessage(err)}` });
     } finally {
       setBusy(null);
     }
@@ -497,28 +483,18 @@ export default function PitchBuilder({ pitchId, items, readOnly, readOnlyReason 
               )}
             </div>
             <div>
-              <form
-                className="flex gap-2"
-                onSubmit={e => {
-                  e.preventDefault();
-                  addByUrl(urlInput);
-                }}
-              >
-                <TextInput
-                  value={urlInput}
-                  onChange={e => setUrlInput(e.target.value)}
-                  placeholder="Add by URL…"
-                />
-                <Button type="submit" disabled={busy === 'searching' || !urlInput.trim()}>
-                  Resolve
-                </Button>
-              </form>
               <TextInput
-                className="mt-2"
                 value={focusedRow.note || ''}
                 onChange={e => patchRow(focus, { note: e.target.value })}
                 placeholder="Note for this row (internal)"
               />
+              <div className="mt-2 text-[11px] text-gray-400">
+                Resolving as <span className="font-medium text-gray-500">{focusedRow.inferred_type || thingType}</span>
+                {focusedRow.reason && <> · server said <span className="text-gray-500">{focusedRow.reason}</span></>}
+                {focusedRow.confidence != null && (
+                  <> · confidence <span className="tabular-nums text-gray-500">{focusedRow.confidence}</span></>
+                )}
+              </div>
             </div>
           </div>
 
