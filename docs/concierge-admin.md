@@ -54,6 +54,24 @@ mismatch degrades rather than crashes. Worth a look on first live use:
 `/imports/parse` failures fall back to splitting pasted text one item per line, so a build can still
 proceed by hand.
 
+## Verifying against prod
+
+Prod is the only environment, and this feature writes **real people's contact details**. Anything created
+during a verification run is a real row in the real table, so:
+
+- Prefer read paths on rows that already exist. Board, detail, tokens display and history all verify
+  without creating anything.
+- If a run needs a pitch of its own, finish with **takedown**, not archive. Archive leaves contact details
+  on the record; takedown purges them and revokes both tokens. Same discipline the backend sessions have
+  been using after their verification runs.
+- A test verification grant is a badge on a real account — remove it with a reason rather than leaving it.
+- Never paste a real contact into a fixture. `mockPitches.js` and `mockVerification.js` are invented people
+  and `example.*` addresses, and should stay that way.
+
+The portal has its own login and every endpoint here needs an admin JWT, so a session without prod
+credentials can build these screens but cannot verify any of them against the live API — including the
+three inferred shapes above. Confirm credentials before starting work that depends on live responses.
+
 ## Data handling
 
 - `/pitches` and `/verification` send `Cache-Control: no-store`; the hooks mirror that with
