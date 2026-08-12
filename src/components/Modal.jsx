@@ -11,20 +11,34 @@ const SIZES = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl'
 export default function Modal({ open, title, description, onClose, children, footer, size = 'md' }) {
   const panelRef = useRef(null);
 
+  // Keep the latest onClose in a ref so the listener below binds once. Callers
+  // pass an inline arrow, which changes identity on every render.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     if (!open) return undefined;
     function onKey(e) {
-      if (e.key === 'Escape') onClose?.();
+      if (e.key === 'Escape') onCloseRef.current?.();
     }
     window.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    panelRef.current?.querySelector('input, textarea, select, button')?.focus();
     return () => {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [open, onClose]);
+  }, [open]);
+
+  // Focus the first control ONCE per opening — never on subsequent renders.
+  // Sharing an effect with the listener above (and keying it on `onClose`) meant
+  // this re-ran on every keystroke and yanked the caret back to the first field.
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.querySelector('input, textarea, select, button')?.focus();
+  }, [open]);
 
   if (!open) return null;
 
