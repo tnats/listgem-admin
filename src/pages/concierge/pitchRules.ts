@@ -240,15 +240,12 @@ export function isExpired(expiresAt?: string | null, now: number = Date.now()): 
 }
 
 /**
- * Registry types offered by the intake select.
- *
- * Curated on purpose. /admin/type-rules is NOT a type vocabulary — it is 355
- * crawler URL-pattern rules keyed on `detected_type`, and it still carries
- * retired types (Gym, Cafe, Bar, Store). Driving the select from it would offer
- * types the registry no longer accepts. The "Other…" escape hatch covers
- * anything missing here; POST /pitches 400s on a type it doesn't know.
+ * Offline fallback for the intake select. The live vocabulary is `GET /types`
+ * (96 entries, public, no auth) — see `useThingTypes`. This list only appears
+ * when that endpoint is unreachable, which is also when POST /pitches is
+ * unreachable, so it exists to keep the form demoable rather than usable.
  */
-export const THING_TYPES: string[] = [
+export const FALLBACK_THING_TYPES: string[] = [
   'Movie',
   'TVSeries',
   'Book',
