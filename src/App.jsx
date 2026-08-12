@@ -22,6 +22,8 @@ import ErQueuePage from './pages/entities/ErQueuePage';
 import PlacesPage from './pages/places/PlacesPage';
 import TriagePage from './pages/triage/TriagePage';
 import SearchQualityPage from './pages/search-quality/SearchQualityPage';
+import OutreachBoardPage from './pages/concierge/OutreachBoardPage';
+import PitchDetailPage from './pages/concierge/PitchDetailPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -60,6 +62,8 @@ export default function App() {
               <Route path="places" element={<PlacesPage />} />
               <Route path="triage" element={<TriagePage />} />
               <Route path="search-quality" element={<SearchQualityPage />} />
+              <Route path="concierge" element={<OutreachBoardPage />} />
+              <Route path="concierge/:pitchId" element={<PitchDetailPage />} />
               <Route path="pipeline" element={<PipelinePage />} />
               <Route path="apis" element={<ApisPage />} />
               <Route path="emails" element={<EmailsPage />} />

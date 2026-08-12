@@ -40,6 +40,12 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    label: 'Growth',
+    items: [
+      { to: '/concierge', label: 'Concierge Outreach' },
+    ],
+  },
+  {
     label: 'System',
     items: [
       { to: '/settings', label: 'Settings' },

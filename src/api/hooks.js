@@ -366,6 +366,129 @@ export function useReEnrichSweepStatus() {
   });
 }
 
+// --- Concierge pitch lists (#434 / #533) ---
+// The API sends `Cache-Control: no-store` on every /pitches and /verification
+// response: these carry real people's contact details and drafts that must not
+// leak. Mirrored client-side with staleTime 0 + a short gcTime so nothing sits
+// in the in-memory cache after the operator navigates away.
+const NO_STORE = { staleTime: 0, gcTime: 30_000, retry: false };
+
+export function usePitches({ status = '', assignedTo = '' } = {}) {
+  return useQuery({
+    queryKey: ['pitches', 'list', status || null, assignedTo || null],
+    queryFn: () =>
+      client
+        .get('/pitches', { params: { status: status || undefined, assigned_to: assignedTo || undefined } })
+        .then(r => r.data),
+    ...NO_STORE,
+  });
+}
+
+export function usePitch(pitchId) {
+  return useQuery({
+    queryKey: ['pitches', 'detail', pitchId],
+    queryFn: () => client.get(`/pitches/${pitchId}`).then(r => r.data),
+    enabled: !!pitchId,
+    ...NO_STORE,
+  });
+}
+
+// `defaultPitchId` suits the detail page; the board passes `pitchId` per call.
+export function usePitchMutations(defaultPitchId) {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['pitches'] });
+  const idOf = (vars) => vars?.pitchId || defaultPitchId;
+  return {
+    create: useMutation({
+      mutationFn: (body) => client.post('/pitches', body).then(r => r.data),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: ({ pitchId, ...body }) => client.patch(`/pitches/${pitchId || defaultPitchId}`, body).then(r => r.data),
+      onSuccess: invalidate,
+    }),
+    // REPLACE semantics — the builder holds the ordering.
+    saveItems: useMutation({
+      mutationFn: ({ pitchId, items }) => client.put(`/pitches/${pitchId || defaultPitchId}/items`, { items }).then(r => r.data),
+      onSuccess: invalidate,
+    }),
+    issueTokens: useMutation({
+      mutationFn: (vars) => client.post(`/pitches/${idOf(vars)}/tokens`).then(r => r.data),
+      onSuccess: invalidate,
+    }),
+    setStatus: useMutation({
+      mutationFn: ({ pitchId, status, detail }) =>
+        client.post(`/pitches/${pitchId || defaultPitchId}/status`, { status, detail: detail || undefined }).then(r => r.data),
+      onSuccess: invalidate,
+    }),
+    // One action: purges contact, revokes both tokens, archives.
+    takedown: useMutation({
+      mutationFn: ({ pitchId, reason } = {}) =>
+        client.post(`/pitches/${pitchId || defaultPitchId}/takedown`, { reason: reason || undefined }).then(r => r.data),
+      onSuccess: invalidate,
+    }),
+    confirmIdentity: useMutation({
+      mutationFn: ({ pitchId, ...body }) =>
+        client.post(`/pitches/${pitchId || defaultPitchId}/confirm-identity`, body).then(r => r.data),
+      onSuccess: invalidate,
+    }),
+  };
+}
+
+// --- Import parse + resolve (#433), shared with the web app's add-flow ---
+export function useImportParse() {
+  return useMutation({
+    mutationFn: (text) => client.post('/imports/parse', { text }).then(r => r.data),
+  });
+}
+
+export function useResolve() {
+  return useMutation({
+    mutationFn: (body) => client.post('/resolve', body).then(r => r.data),
+  });
+}
+
+// Up to 200 candidates for one rate-limit unit — always prefer this for a build.
+export function useResolveBatch() {
+  return useMutation({
+    mutationFn: (items) => client.post('/resolve/batch', { items }).then(r => r.data),
+  });
+}
+
+// --- Verification (#435) ---
+export function useVerifiedUsers({ type = '', limit = 50, offset = 0 } = {}) {
+  return useQuery({
+    queryKey: ['verification', 'list', type || null, limit, offset],
+    queryFn: () =>
+      client.get('/verification', { params: { type: type || undefined, limit, offset } }).then(r => r.data),
+    ...NO_STORE,
+  });
+}
+
+export function useVerificationHistory(userId) {
+  return useQuery({
+    queryKey: ['verification', 'history', userId],
+    queryFn: () => client.get(`/verification/${userId}/history`).then(r => r.data),
+    enabled: !!userId,
+    ...NO_STORE,
+  });
+}
+
+export function useVerificationMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['verification'] });
+  return {
+    verify: useMutation({
+      mutationFn: ({ userId, ...body }) => client.post(`/verification/${userId}`, body).then(r => r.data),
+      onSuccess: invalidate,
+    }),
+    unverify: useMutation({
+      mutationFn: ({ userId, reason }) => client.delete(`/verification/${userId}`, { data: { reason } }).then(r => r.data),
+      onSuccess: invalidate,
+    }),
+  };
+}
+
 // --- Search-quality inspector (#406) ---
 export function useHybridSearch(query, limit = 20) {
   return useQuery({
