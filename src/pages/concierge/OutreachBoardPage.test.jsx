@@ -3,6 +3,8 @@ import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../../test/utils';
 import client from '../../api/client';
 import OutreachBoardPage from './OutreachBoardPage';
+import { MOCK_PITCHES } from './mockPitches';
+import { BOARD_COLUMNS } from './pitchRules';
 
 vi.mock('../../api/client', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
@@ -35,6 +37,44 @@ function serve(pitches) {
       : Promise.reject(new Error('not mocked')),
   );
 }
+
+describe('outreach board — an empty live list is not a missing one', () => {
+  beforeEach(() => {
+    client.get.mockReset();
+  });
+
+  // pitch_lists is legitimately empty in prod (listgem-platform#536 deleted the
+  // last fixtures). The other read-only pages in this repo treat an empty array
+  // as "fall back to the sample" — here that would put seven invented people
+  // with example.* contacts on the board that decides who staff contact next.
+  // Empty means empty.
+  it('shows nothing rather than fixtures while the request is in flight', async () => {
+    let settle;
+    client.get.mockReturnValue(new Promise(resolve => { settle = resolve; }));
+    renderWithProviders(<OutreachBoardPage />);
+
+    await screen.findByText(/Loading the live board/i);
+    for (const p of MOCK_PITCHES) {
+      expect(screen.queryByText(p.target_name)).toBeNull();
+    }
+    settle({ data: { pitches: [], count: 0 } });
+    await screen.findByText(/Live board/i);
+  });
+
+  it('renders an empty live board rather than the fixtures', async () => {
+    serve([]);
+    renderWithProviders(<OutreachBoardPage />);
+
+    await screen.findByText(/Live board/i);
+    expect(screen.queryByText(/Seeded sample/i)).toBeNull();
+    // Every column empty — the count text is split across nodes, the columns aren't.
+    expect(screen.getAllByText('empty')).toHaveLength(BOARD_COLUMNS.length);
+    // Not one fixture name may reach the DOM.
+    for (const p of MOCK_PITCHES) {
+      expect(screen.queryByText(p.target_name)).toBeNull();
+    }
+  });
+});
 
 describe('outreach board — re-pitch gating (invariant 1)', () => {
   beforeEach(() => {
