@@ -29,9 +29,15 @@ npm run preview # preview production build
 ## Tests
 
 ```bash
-npm test         # vitest, single run
+npm test          # vitest, single run
 npm run test:watch
+npm run typecheck # tsc --noEmit
 ```
+
+The portal is plain JSX. `.ts` is used only for modules carrying a real
+contract — `pages/concierge/pitchRules.ts`, `pages/concierge/resolveAdapter.ts`
+and `pages/moderation/verificationRules.ts` — which sit alongside untyped pages
+via `allowJs`. No conversion is implied for anything else.
 
 Vitest + Testing Library (jsdom). The suite is deliberately narrow: it pins the
 invariants that a UI can quietly break on surfaces handling real people's

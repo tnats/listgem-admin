@@ -20,6 +20,22 @@ Shared primitives added for this cycle, and reusable everywhere: `components/Mod
 `components/DataTable.jsx`, `components/Form.jsx` (Field/TextInput/TextArea/Select/Button),
 `components/VerifiedBadge.jsx`.
 
+## Typed where it counts
+
+The portal is plain JSX and stays that way. Three modules are `.ts`, because they carry the contract this
+feature actually turns on — seven statuses, a re-pitch flag that must never be confused with a status, two
+token types, and the item payload:
+
+- `pages/concierge/pitchRules.ts` — `PitchStatus`, `Pitch`, the transition map
+- `pages/concierge/resolveAdapter.ts` — `BuilderRow`, `Resolution`, `ItemPayload`; inputs are `unknown` and
+  outputs are strict, which is what makes reading the unspecified `/resolve` shapes defensible
+- `pages/moderation/verificationRules.ts` — `VerificationMethod`, `PublicBadge` (no `method`, by type)
+
+`tsconfig.json` runs `allowJs` with `checkJs: false`, so these sit beside untyped `.jsx` with no conversion
+pressure, and `eslint.config.js` has a `**/*.{ts,tsx}` block so they don't silently drop out of linting.
+`npm run typecheck`. The tests stay `.js` on purpose: several feed deliberately malformed input to the
+validators, which is the behaviour being asserted.
+
 ## Where the invariants live
 
 Each one is enforced by the API too — the UI's job is to never offer the action.

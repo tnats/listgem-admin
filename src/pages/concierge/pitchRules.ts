@@ -3,8 +3,66 @@
 // Everything here is the UI half of an invariant the API also enforces. The API
 // answers 4xx; this module's job is to make sure the button was never offered.
 // Kept dependency-free so `pitchRules.test.js` can pin each rule down.
+//
+// Typed because the contract is the point: seven statuses, two token types and a
+// re-pitch flag that must not be confused with a status.
 
-export const PITCH_STATUSES = [
+export type PitchStatus =
+  | 'draft'
+  | 'pitched'
+  | 'accepted'
+  | 'provisioned'
+  | 'no_response'
+  | 'declined'
+  | 'archived';
+
+export type SubjectType = 'individual' | 'organization';
+
+export interface Pitch {
+  pitch_id: string;
+  target_name: string;
+  target_org?: string | null;
+  /** Purged by takedown — absent means purged, not unknown. */
+  target_contact?: string | null;
+  source_url?: string | null;
+  source_attribution?: string | null;
+  proposed_title: string;
+  proposed_description?: string | null;
+  thing_type: string;
+  category?: string | null;
+  status: PitchStatus;
+  /** The server's re-pitch verdict. Never derive this from `status`. */
+  can_repitch: boolean;
+  invite_token?: string | null;
+  invite_expires_at?: string | null;
+  invite_used_at?: string | null;
+  preview_token?: string | null;
+  created_by?: string | null;
+  assigned_to?: string | null;
+  notes?: string | null;
+  provisioned_list_id?: string | null;
+  provisioned_user_id?: string | null;
+  pitched_at?: string | null;
+  responded_at?: string | null;
+  provisioned_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  item_count?: number;
+  resolved_count?: number;
+}
+
+/** Pitches arrive from a query that may not have settled. */
+export type MaybePitch = Pitch | null | undefined;
+
+export type ErrorMap = Record<string, string>;
+
+export interface BoardColumn {
+  status: PitchStatus;
+  label: string;
+  hint: string;
+}
+
+export const PITCH_STATUSES: PitchStatus[] = [
   'draft',
   'pitched',
   'accepted',
@@ -16,7 +74,7 @@ export const PITCH_STATUSES = [
 
 // Board columns, left to right along the happy path; the two off-ramps and the
 // archive sink trail it.
-export const BOARD_COLUMNS = [
+export const BOARD_COLUMNS: BoardColumn[] = [
   { status: 'draft', label: 'Draft', hint: 'Built, not yet sent' },
   { status: 'pitched', label: 'Pitched', hint: 'Awaiting a reply' },
   { status: 'accepted', label: 'Accepted', hint: 'Said yes — send the invite' },
@@ -28,7 +86,7 @@ export const BOARD_COLUMNS = [
 
 // The status machine from the API contract. `archived` is a sink with no
 // outgoing transitions; `declined` only drains into it.
-const TRANSITIONS = {
+const TRANSITIONS: Record<PitchStatus, PitchStatus[]> = {
   draft: ['pitched', 'archived'],
   pitched: ['accepted', 'declined', 'no_response', 'archived'],
   accepted: ['provisioned', 'archived'],
@@ -41,9 +99,9 @@ const TRANSITIONS = {
 // `provisioned` normally arrives on its own when the target claims the invite —
 // staff can still set it by hand to repair state, so it's offered last and
 // labelled as a correction.
-export const AUTOMATIC_STATUSES = ['provisioned'];
+export const AUTOMATIC_STATUSES: PitchStatus[] = ['provisioned'];
 
-export const STATUS_LABEL = {
+export const STATUS_LABEL: Record<PitchStatus, string> = {
   draft: 'Draft',
   pitched: 'Pitched',
   accepted: 'Accepted',
@@ -53,11 +111,11 @@ export const STATUS_LABEL = {
   archived: 'Archived',
 };
 
-export function allowedTransitions(status) {
+export function allowedTransitions(status: PitchStatus): PitchStatus[] {
   return TRANSITIONS[status] ? [...TRANSITIONS[status]] : [];
 }
 
-export function isTerminal(status) {
+export function isTerminal(status: PitchStatus): boolean {
   return allowedTransitions(status).length === 0;
 }
 
@@ -69,7 +127,7 @@ export function isTerminal(status) {
  * `declined` is additionally hard-blocked here: the flag is the only *allow*
  * signal, and status is only ever used to *deny*.
  */
-export function canRepitch(pitch) {
+export function canRepitch(pitch: MaybePitch): boolean {
   if (!pitch) return false;
   if (pitch.status === 'declined') return false;
   return pitch.can_repitch === true;
@@ -80,7 +138,7 @@ export function canRepitch(pitch) {
  * re-pitch the server hasn't sanctioned. Moving anything other than a `draft`
  * back to `pitched` *is* a re-pitch, so it needs `can_repitch`.
  */
-export function offeredTransitions(pitch) {
+export function offeredTransitions(pitch: MaybePitch): PitchStatus[] {
   if (!pitch) return [];
   return allowedTransitions(pitch.status).filter(next => {
     if (next === 'pitched' && pitch.status !== 'draft') return canRepitch(pitch);
@@ -89,7 +147,7 @@ export function offeredTransitions(pitch) {
 }
 
 /** PUT /pitches/:id/items 409s once a pitch is provisioned or archived. */
-export function canEditItems(pitch) {
+export function canEditItems(pitch: MaybePitch): boolean {
   if (!pitch) return false;
   return pitch.status !== 'provisioned' && pitch.status !== 'archived';
 }
@@ -100,7 +158,7 @@ export function canEditItems(pitch) {
  * blocked locally too: takedown revoked those tokens on purpose.
  * Returns null when issuing is fine, otherwise the reason to show the operator.
  */
-export function tokenIssueBlockedReason(pitch) {
+export function tokenIssueBlockedReason(pitch: MaybePitch): string | null {
   if (!pitch) return 'No pitch loaded.';
   if (pitch.invite_used_at) return 'Invite already claimed — re-issuing would let one draft be claimed twice.';
   if (pitch.status === 'declined') return 'Target declined. Declined is terminal; archive instead.';
@@ -108,7 +166,7 @@ export function tokenIssueBlockedReason(pitch) {
   return null;
 }
 
-export function canIssueTokens(pitch) {
+export function canIssueTokens(pitch: MaybePitch): boolean {
   return tokenIssueBlockedReason(pitch) === null;
 }
 
@@ -117,53 +175,61 @@ export function canIssueTokens(pitch) {
  * capability, so a claim proves someone held the link, not that they are the
  * target. The API requires status = provisioned.
  */
-export function canConfirmIdentity(pitch) {
+export function canConfirmIdentity(pitch: MaybePitch): boolean {
   return pitch?.status === 'provisioned';
 }
 
 /** Takedown purges contact, revokes both tokens and archives — one action, once. */
-export function canTakedown(pitch) {
+export function canTakedown(pitch: MaybePitch): boolean {
   if (!pitch) return false;
   return pitch.status !== 'archived';
 }
 
-/** Evidence is the only thing standing behind a concierge badge. API 400s without it. */
-export function confirmIdentityErrors({ evidence, type }) {
-  const errors = {};
-  if (!evidence || !evidence.trim()) {
+/**
+ * Evidence is the only thing standing behind a concierge badge. API 400s without
+ * it. Input is whatever the form holds, so it is deliberately loose — narrowing
+ * is this function's job.
+ */
+export function confirmIdentityErrors(input: { evidence?: string | null; type?: string | null }): ErrorMap {
+  const errors: ErrorMap = {};
+  if (!input.evidence || !input.evidence.trim()) {
     errors.evidence = 'Evidence is required — a concierge grant has no machine-checkable proof.';
   }
-  if (type !== 'individual' && type !== 'organization') {
+  if (input.type !== 'individual' && input.type !== 'organization') {
     errors.type = 'Pick individual or organization.';
   }
   return errors;
 }
 
 /** POST /pitches requires target_name, proposed_title and a valid thing_type. */
-export function intakeErrors({ target_name, proposed_title, thing_type }) {
-  const errors = {};
-  if (!target_name || !target_name.trim()) errors.target_name = 'Required.';
-  if (!proposed_title || !proposed_title.trim()) errors.proposed_title = 'Required.';
-  if (!thing_type) errors.thing_type = 'Required — must be a valid registry type.';
+export function intakeErrors(input: {
+  target_name?: string | null;
+  proposed_title?: string | null;
+  thing_type?: string | null;
+}): ErrorMap {
+  const errors: ErrorMap = {};
+  if (!input.target_name || !input.target_name.trim()) errors.target_name = 'Required.';
+  if (!input.proposed_title || !input.proposed_title.trim()) errors.proposed_title = 'Required.';
+  if (!input.thing_type) errors.thing_type = 'Required — must be a valid registry type.';
   return errors;
 }
 
-export function hasErrors(errors) {
+export function hasErrors(errors: ErrorMap): boolean {
   return Object.keys(errors).length > 0;
 }
 
-const PUBLIC_SITE = (import.meta.env?.VITE_PUBLIC_SITE_URL || 'https://listgem.com').replace(/\/$/, '');
+const PUBLIC_SITE = String(import.meta.env?.VITE_PUBLIC_SITE_URL || 'https://listgem.com').replace(/\/$/, '');
 
 /** The two links staff actually send. Public, no auth, rate-limited 30/min. */
-export function previewUrl(token) {
+export function previewUrl(token?: string | null): string | null {
   return token ? `${PUBLIC_SITE}/pitch/${token}` : null;
 }
 
-export function inviteUrl(token) {
+export function inviteUrl(token?: string | null): string | null {
   return token ? `${PUBLIC_SITE}/signup?invite=${token}` : null;
 }
 
-export function isExpired(expiresAt, now = Date.now()) {
+export function isExpired(expiresAt?: string | null, now: number = Date.now()): boolean {
   if (!expiresAt) return false;
   const t = new Date(expiresAt).getTime();
   return Number.isFinite(t) && t < now;
@@ -173,7 +239,7 @@ export function isExpired(expiresAt, now = Date.now()) {
  * Fallback registry types for the intake select. The live list comes from
  * /admin/type-rules when it's reachable; this keeps intake usable offline.
  */
-export const FALLBACK_THING_TYPES = [
+export const FALLBACK_THING_TYPES: string[] = [
   'Movie',
   'TVSeries',
   'Book',

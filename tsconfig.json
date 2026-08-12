@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // The portal is plain JSX and stays that way. `.ts` is for the modules that
+    // carry a real contract — the concierge state machine and payload shapes —
+    // so allowJs lets them sit alongside untyped pages without a conversion.
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["src"]
+}
