@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { renderWithProviders } from '../../test/utils';
 import client from '../../api/client';
 import IntakeModal from './IntakeModal';
@@ -67,5 +67,24 @@ describe('intake type picker', () => {
 
     await screen.findByText(/unreachable/i);
     expect(optionText()).toContain('Movie');
+  });
+});
+
+describe('intake form focus', () => {
+  beforeEach(() => {
+    client.get.mockReset();
+    client.get.mockResolvedValue({ data: TYPES });
+  });
+
+  it('leaves the caret where the operator put it', async () => {
+    renderWithProviders(<IntakeModal open onClose={() => {}} />);
+    await screen.findByText(/🎬 Movie/);
+
+    const title = screen.getByLabelText(/Proposed title/i);
+    title.focus();
+    fireEvent.change(title, { target: { value: 'Essential Nordic Noir' } });
+
+    expect(document.activeElement).toBe(title);
+    expect(screen.getByLabelText(/Target name/i).value).toBe('');
   });
 });
