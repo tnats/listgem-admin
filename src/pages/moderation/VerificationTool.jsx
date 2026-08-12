@@ -91,9 +91,11 @@ export default function VerificationTool() {
   const [note, setNote] = useState(null);
 
   const query = useVerifiedUsers({ type, limit: 100 });
+  // As on the outreach board: an in-flight request is not a missing endpoint, so
+  // no fictional verified accounts while we wait.
   const live = query.data?.users || query.data?.verified;
-  const usingSample = !live;
-  const rows = (usingSample ? MOCK_VERIFIED : live).filter(u => !type || u.verified?.type === type);
+  const usingSample = !query.isLoading && !live;
+  const rows = (live || (usingSample ? MOCK_VERIFIED : [])).filter(u => !type || u.verified?.type === type);
 
   const columns = [
     {
@@ -139,10 +141,16 @@ export default function VerificationTool() {
     <>
       <div
         className={`mb-4 rounded border p-3 text-xs ${
-          usingSample ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-indigo-100 bg-indigo-50 text-indigo-800'
+          query.isLoading
+            ? 'border-gray-200 bg-gray-50 text-gray-500'
+            : usingSample
+              ? 'border-amber-200 bg-amber-50 text-amber-800'
+              : 'border-indigo-100 bg-indigo-50 text-indigo-800'
         }`}
       >
-        {usingSample ? (
+        {query.isLoading ? (
+          <>Loading the live registry from <code>/verification</code>…</>
+        ) : usingSample ? (
           <>
             Seeded sample — live <code>/verification</code> not reachable from here.
           </>

@@ -77,9 +77,12 @@ export default function OutreachBoardPage() {
   const query = usePitches({ assignedTo });
   const { setStatus } = usePitchMutations();
 
+  // Don't paint the sample while the request is still in flight: for that beat
+  // the board would show seven invented people, with example.* contacts, in the
+  // place staff read as "who we contact next". Empty until we know.
   const live = query.data?.pitches;
-  const usingSample = !live;
-  const all = usingSample ? MOCK_PITCHES : live;
+  const usingSample = !query.isLoading && !live;
+  const all = live || (usingSample ? MOCK_PITCHES : []);
   const pitches = all.filter(
     p =>
       (!statusFilter || p.status === statusFilter) &&
@@ -113,12 +116,16 @@ export default function OutreachBoardPage() {
 
       <div
         className={`mb-4 rounded border p-3 text-xs ${
-          usingSample
-            ? 'border-amber-200 bg-amber-50 text-amber-800'
-            : 'border-indigo-100 bg-indigo-50 text-indigo-800'
+          query.isLoading
+            ? 'border-gray-200 bg-gray-50 text-gray-500'
+            : usingSample
+              ? 'border-amber-200 bg-amber-50 text-amber-800'
+              : 'border-indigo-100 bg-indigo-50 text-indigo-800'
         }`}
       >
-        {usingSample ? (
+        {query.isLoading ? (
+          <>Loading the live board from <code>/pitches</code>…</>
+        ) : usingSample ? (
           <>
             Seeded sample — live <code>/pitches</code> not reachable from here. Actions POST best-effort and
             report what the API said. No real contact details are in the sample.
