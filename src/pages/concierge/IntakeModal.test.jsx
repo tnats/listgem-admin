@@ -88,3 +88,37 @@ describe('intake form focus', () => {
     expect(screen.getByLabelText(/Target name/i).value).toBe('');
   });
 });
+
+describe('assignee picker', () => {
+  const STAFF = {
+    users: [
+      { user_id: 'u1', email: 'gtm@listgem.com', username: 'gtm', is_admin: true, is_moderator: false },
+      { user_id: 'u2', email: 'mod@listgem.com', username: 'mod', is_admin: false, is_moderator: true },
+      { user_id: 'u3', email: 'someone@example.com', username: 'someone', is_admin: false, is_moderator: false },
+    ],
+    total: 3,
+  };
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.get.mockImplementation(url =>
+      url === '/types'
+        ? Promise.resolve({ data: TYPES })
+        : url === '/admin/users'
+          ? Promise.resolve({ data: STAFF })
+          : Promise.reject(new Error('not mocked')),
+    );
+  });
+
+  // assigned_to is free text server-side and the board filter matches it
+  // exactly, so a typo returns an empty board with no error. A closed list of
+  // real accounts removes the failure rather than documenting it.
+  it('offers portal staff only, never a free-text box', async () => {
+    renderWithProviders(<IntakeModal open onClose={() => {}} />);
+    await screen.findByText('gtm@listgem.com');
+
+    const options = [...document.querySelectorAll('#assigned_to option')].map(o => o.textContent);
+    expect(options).toEqual(['Unassigned', 'gtm@listgem.com', 'mod@listgem.com']);
+    expect(document.querySelector('input#assigned_to')).toBeNull();
+  });
+});
