@@ -4,6 +4,7 @@ import VerifiedBadge from '../../components/VerifiedBadge';
 import { useAdminUsers, useVerifiedUsers } from '../../api/hooks';
 import client from '../../api/client';
 import VerifyModal from './VerifyModal';
+import RolesModal from './RolesModal';
 
 export default function UserManagement() {
   const [search, setSearch] = useState('');
@@ -23,6 +24,8 @@ export default function UserManagement() {
     (verifiedData?.users || verifiedData?.verified || []).map(u => [u.user_id, u.verified]),
   );
   const [verifyModal, setVerifyModal] = useState(null); // { mode, user }
+  const [rolesUser, setRolesUser] = useState(null);
+  const [roleNote, setRoleNote] = useState(null);
 
   // Action modal state
   const [modal, setModal] = useState(null); // { type, user }
@@ -92,6 +95,10 @@ export default function UserManagement() {
         </button>
       </form>
 
+      {roleNote && (
+        <div className="mb-3 rounded bg-green-50 p-2 text-xs text-green-700">{roleNote}</div>
+      )}
+
       {/* Users Table */}
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <div className="text-xs text-gray-400 mb-3">{total} users total</div>
@@ -144,6 +151,12 @@ export default function UserManagement() {
                   </td>
                   <td className="py-2 text-right">
                     <div className="flex gap-1 justify-end">
+                      <button
+                        onClick={() => setRolesUser(user)}
+                        className="px-2 py-0.5 text-xs bg-gray-50 text-gray-600 rounded hover:bg-gray-100"
+                      >
+                        Roles
+                      </button>
                       {(user.verified || verifiedById.get(user.user_id)) ? (
                         <button
                           onClick={() => setVerifyModal({ mode: 'unverify', user })}
@@ -260,6 +273,21 @@ export default function UserManagement() {
           </div>
         </div>
       )}
+
+      <RolesModal
+        open={!!rolesUser}
+        user={rolesUser}
+        onClose={() => setRolesUser(null)}
+        onDone={data => {
+          const who = data?.user?.email || data?.user?.username || 'User';
+          setRoleNote(
+            data?.changed?.length
+              ? `${who}: ${data.changed.join('; ')}.${data.self ? ' That was your own account — it takes effect at next sign-in.' : ''}`
+              : `${who}: no change.`,
+          );
+          refetch();
+        }}
+      />
 
       <VerifyModal
         open={!!verifyModal}

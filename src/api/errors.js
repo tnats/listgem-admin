@@ -9,10 +9,13 @@ export function apiErrorMessage(err) {
   const data = err?.response?.data;
   const status = err?.response?.status;
   const base = data?.error || data?.message || err?.message || 'Request failed';
+  // Several endpoints put the headline in `error` and the actionable part in
+  // `message` — the last-admin 409 being the one that matters most.
+  const detail = data?.error && data?.message && data.message !== data.error ? ` ${data.message}` : '';
   const allowed = Array.isArray(data?.allowed) && data.allowed.length
     ? ` Allowed from here: ${data.allowed.join(', ')}.`
     : '';
-  return `${status ? `${status} · ` : ''}${base}${allowed}`;
+  return `${status ? `${status} · ` : ''}${base}${detail}${allowed}`;
 }
 
 export function allowedFrom(err) {
