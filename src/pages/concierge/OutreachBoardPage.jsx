@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
-import { Button, Select, TextInput } from '../../components/Form';
+import { Button, Select } from '../../components/Form';
 import { usePitches, usePitchMutations } from '../../api/hooks';
 import { apiErrorMessage } from '../../api/errors';
 import { BOARD_COLUMNS, STATUS_LABEL, canRepitch } from './pitchRules';
 import { MOCK_PITCHES } from './mockPitches';
 import IntakeModal from './IntakeModal';
+import AssigneeSelect from './AssigneeSelect';
 
 function relativeDays(iso) {
   if (!iso) return null;
@@ -68,13 +69,14 @@ function PitchCard({ pitch, onRepitch, busy }) {
 export default function OutreachBoardPage() {
   const navigate = useNavigate();
   const [assignedTo, setAssignedTo] = useState('');
-  const [assignedInput, setAssignedInput] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [note, setNote] = useState(null);
   const [busyId, setBusyId] = useState(null);
 
-  const query = usePitches({ assignedTo });
+  // Unfiltered on purpose: filtering happens below, so the assignee list always
+  // offers every value present on the board rather than just the selected one.
+  const query = usePitches();
   const { setStatus } = usePitchMutations();
 
   // Don't paint the sample while the request is still in flight: for that beat
@@ -84,10 +86,9 @@ export default function OutreachBoardPage() {
   const usingSample = !query.isLoading && !live;
   const all = live || (usingSample ? MOCK_PITCHES : []);
   const pitches = all.filter(
-    p =>
-      (!statusFilter || p.status === statusFilter) &&
-      (!usingSample || !assignedTo || p.assigned_to === assignedTo),
+    p => (!statusFilter || p.status === statusFilter) && (!assignedTo || p.assigned_to === assignedTo),
   );
+  const knownAssignees = [...new Set(all.map(p => p.assigned_to).filter(Boolean))];
 
   const columns = BOARD_COLUMNS.map(col => ({
     ...col,
@@ -149,32 +150,19 @@ export default function OutreachBoardPage() {
           options={BOARD_COLUMNS.map(c => ({ value: c.status, label: STATUS_LABEL[c.status] }))}
           className="w-44"
         />
-        <form
-          className="flex items-center gap-2"
-          onSubmit={e => {
-            e.preventDefault();
-            setAssignedTo(assignedInput.trim());
-          }}
-        >
-          <TextInput
-            value={assignedInput}
-            onChange={e => setAssignedInput(e.target.value)}
-            placeholder="Filter by assignee…"
-            className="w-56"
+        <div className="w-56">
+          <AssigneeSelect
+            value={assignedTo}
+            onChange={e => setAssignedTo(e.target.value)}
+            extra={knownAssignees}
+            placeholder="All assignees"
           />
-          <Button type="submit">Apply</Button>
-          {assignedTo && (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setAssignedTo('');
-                setAssignedInput('');
-              }}
-            >
-              Clear
-            </Button>
-          )}
-        </form>
+        </div>
+        {assignedTo && (
+          <Button variant="ghost" onClick={() => setAssignedTo('')}>
+            Clear
+          </Button>
+        )}
         <span className="ml-auto text-xs text-gray-400 tabular-nums">
           {pitches.length} shown{query.isFetching ? ' · refreshing…' : ''}
         </span>

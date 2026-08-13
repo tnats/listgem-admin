@@ -4,6 +4,7 @@ import { Button, Field, Select, TextArea, TextInput } from '../../components/For
 import { usePitchMutations, useThingTypes } from '../../api/hooks';
 import { apiErrorMessage } from '../../api/errors';
 import { RETIRED_THING_TYPES } from '../../taxonomy';
+import AssigneeSelect from './AssigneeSelect';
 import { FALLBACK_THING_TYPES, hasErrors, intakeErrors } from './pitchRules';
 
 /**
@@ -150,16 +151,11 @@ export default function IntakeModal({ open, onClose, onCreated }) {
       </Field>
 
       <div className="grid grid-cols-2 gap-x-4">
-        <Field
-          label="Assigned to"
-          hint="The board filter matches this exactly — use whatever form the team agreed."
-          htmlFor="assigned_to"
-        >
-          <TextInput
+        <Field label="Assigned to" hint="Who's chasing this one. Optional." htmlFor="assigned_to">
+          <AssigneeSelect
             id="assigned_to"
             value={form.assigned_to}
             onChange={e => set('assigned_to', e.target.value)}
-            placeholder="e.g. gtm@listgem.com"
           />
         </Field>
         <Field label="Notes" hint="Anything the next person needs to know." htmlFor="notes">

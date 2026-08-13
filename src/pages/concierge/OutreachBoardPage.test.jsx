@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../../test/utils';
 import client from '../../api/client';
 import OutreachBoardPage from './OutreachBoardPage';
@@ -113,5 +113,42 @@ describe('outreach board — re-pitch gating (invariant 1)', () => {
     // The sample's declined target must not carry a re-pitch action either.
     const declinedCard = screen.getByText('Whitney Adeyemi-Cole').closest('div.rounded-lg');
     expect(declinedCard.textContent).not.toMatch(/re-pitch/i);
+  });
+});
+
+describe('outreach board — assignee filter', () => {
+  beforeEach(() => {
+    client.get.mockReset();
+  });
+
+  // Previously a free-text box sent to the server as an exact match, so one
+  // typo returned an empty board with no error. Now a closed list, filtered
+  // client-side so every value on the board is always offered.
+  it('offers every assignee present on the board and filters to it', async () => {
+    client.get.mockImplementation(url =>
+      url === '/pitches'
+        ? Promise.resolve({
+            data: {
+              pitches: [
+                { ...QUIET, assigned_to: 'gtm@listgem.com' },
+                { ...DECLINED, assigned_to: 'ops@listgem.com' },
+              ],
+            },
+          })
+        : Promise.reject(new Error('not mocked')),
+    );
+    renderWithProviders(<OutreachBoardPage />);
+    await screen.findByText('Quiet Target');
+
+    const select = document.querySelectorAll('select')[1];
+    expect([...select.options].map(o => o.textContent)).toEqual([
+      'All assignees',
+      'gtm@listgem.com',
+      'ops@listgem.com',
+    ]);
+
+    fireEvent.change(select, { target: { value: 'ops@listgem.com' } });
+    expect(screen.queryByText('Quiet Target')).toBeNull();
+    expect(screen.getByText('Declined Target')).toBeTruthy();
   });
 });
