@@ -6,6 +6,7 @@ import {
   chunkForBatch,
   normalizeParsed,
   normalizeResolution,
+  normalizeSearchResults,
   pendingIndices,
   rowsFromItems,
   rowsFromParsed,
@@ -269,5 +270,62 @@ describe('rowsFromItems', () => {
 
   it('handles a pitch with no items', () => {
     expect(rowsFromItems(undefined)).toEqual([]);
+  });
+});
+
+describe('federated search results (GET /search-to-add)', () => {
+  // Trimmed from the real shape: registry hits carry a thing_id and sort first,
+  // external hits carry source/source_id and in_registry: false.
+  const RESULTS = {
+    results: [
+      {
+        thing_id: 'movie_the_matrix_1999_14aa79a9',
+        type: 'Movie',
+        title: 'The Matrix',
+        subtitle: 'Lana Wachowski',
+        year: 1999,
+        source: 'local',
+        source_id: null,
+        in_registry: true,
+      },
+      {
+        thing_id: null,
+        type: 'Movie',
+        title: 'The Matrix Resurrections',
+        subtitle: null,
+        year: 2021,
+        source: 'tmdb',
+        source_id: 624860,
+        in_registry: false,
+      },
+    ],
+    count: 2,
+    sources_searched: ['local', 'tmdb_movie'],
+  };
+
+  it('reads registry and external hits, keeping them distinguishable', () => {
+    const [registry, external] = normalizeSearchResults(RESULTS);
+    expect(registry.thing_id).toBe('movie_the_matrix_1999_14aa79a9');
+    expect(registry.in_registry).toBe(true);
+    expect(external.thing_id).toBeNull();
+    expect(external.in_registry).toBe(false);
+    expect(external.source).toBe('tmdb');
+  });
+
+  it('takes the creator from `subtitle`, where this endpoint puts it', () => {
+    expect(normalizeSearchResults(RESULTS)[0].creator).toBe('Lana Wachowski');
+  });
+
+  it('survives an empty or malformed response', () => {
+    expect(normalizeSearchResults({ results: [] })).toEqual([]);
+    expect(normalizeSearchResults(null)).toEqual([]);
+    expect(normalizeSearchResults({ results: 'nope' })).toEqual([]);
+  });
+
+  it('still marks /resolve suggestions as in-registry — they are graph neighbours', () => {
+    // /resolve never sends in_registry; anything it returns with a thing_id is
+    // by definition already in the graph.
+    const res = normalizeResolution({ status: 'no_match', suggestions: [{ thing_id: 'thing_a', title: 'A' }] });
+    expect(res.candidates[0].in_registry).toBe(true);
   });
 });

@@ -37,6 +37,14 @@ export interface Candidate {
   year: number | string | null;
   image_url: string | null;
   score: number | null;
+  /**
+   * False for a federated hit that exists in TMDB/Spotify/Books but not in our
+   * registry. Those carry no thing_id and cannot be attached to a pitch until
+   * there's a way to materialise a Thing without a list (listgem-platform#550).
+   */
+  in_registry: boolean;
+  /** 'local' for a registry hit, otherwise the external source that found it. */
+  source: string | null;
 }
 
 /** One line in the builder table. The builder holds the ordering. */
@@ -150,11 +158,34 @@ export function normalizeCandidate(raw: unknown): Candidate | null {
     thing_id: thingId,
     title: firstString(src.title, src.name) || '(untitled)',
     type: firstString(src.thing_type, src.type),
-    creator: firstString(src.creator, src.author, src.artist),
+    // `subtitle` is where /search-to-add puts artist/author/director.
+    creator: firstString(src.creator, src.author, src.artist, src.subtitle),
     year: typeof year === 'number' || typeof year === 'string' ? year : null,
     image_url: firstString(src.image_url, src.image),
     score: typeof src.score === 'number' ? src.score : null,
+    // /resolve returns graph neighbours, which are in the registry by
+    // definition; only /search-to-add says so explicitly.
+    in_registry: typeof src.in_registry === 'boolean' ? src.in_registry : !!thingId,
+    source: firstString(src.source),
   };
+}
+
+/**
+ * Results from GET /search-to-add — federated across the registry and the
+ * external catalogues, registry hits sorted first by the API.
+ *
+ * This is the search box. /resolve is a duplicate-checker: it embeds a
+ * candidate and asks the ER matcher whether we already hold it, which answers a
+ * much narrower question and reports "no candidates" for anything the matcher
+ * isn't confident about.
+ */
+export function normalizeSearchResults(data: unknown): Candidate[] {
+  const list = Array.isArray(data)
+    ? data
+    : isObject(data) && Array.isArray(data.results)
+      ? data.results
+      : [];
+  return list.map(normalizeCandidate).filter((c): c is Candidate => c !== null);
 }
 
 /**

@@ -486,6 +486,18 @@ export function useThingTypes() {
   });
 }
 
+/**
+ * Federated search — registry + TMDB/Spotify/Google Books/Places/Yelp/Amazon.
+ * A GET, but modelled as a mutation because the builder searches on demand
+ * rather than as the operator types. 20/min per user.
+ */
+export function useSearchToAdd() {
+  return useMutation({
+    mutationFn: ({ query, type, limit = 10 }) =>
+      client.get('/search-to-add', { params: { query, type: type || undefined, limit } }).then(r => r.data),
+  });
+}
+
 // --- Verification (#435) ---
 export function useVerifiedUsers({ type = '', limit = 50, offset = 0 } = {}) {
   return useQuery({
