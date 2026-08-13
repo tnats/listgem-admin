@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import DataTable from '../../components/DataTable';
 import { Button, Field, TextArea, TextInput } from '../../components/Form';
-import { useImportParse, usePitchMutations, useResolve, useResolveBatch } from '../../api/hooks';
+import { useImportParse, usePitchMutations, useResolveBatch, useSearchToAdd } from '../../api/hooks';
 import { apiErrorMessage } from '../../api/errors';
 import {
   ROW_STATUS,
   applyBatchResults,
   batchResults,
   chunkForBatch,
-  normalizeResolution,
   normalizeParsed,
+  normalizeSearchResults,
   pendingIndices,
   rowsFromItems,
   rowsFromParsed,
@@ -36,11 +36,22 @@ function Kbd({ children }) {
 }
 
 function CandidateRow({ candidate, chosen, onPick }) {
+  // A federated hit with no thing_id exists in TMDB/Spotify/Books but not in our
+  // registry. Shown rather than hidden — knowing it exists is what tells the
+  // operator to leave the row rather than keep hunting — but not attachable
+  // until listgem-platform#550.
+  const unavailable = !candidate.thing_id;
   return (
     <button
-      onClick={onPick}
+      onClick={unavailable ? undefined : onPick}
+      disabled={unavailable}
+      title={unavailable ? `Found in ${candidate.source || 'an external source'}, not yet in our registry` : undefined}
       className={`flex w-full items-baseline gap-2 rounded border px-2 py-1 text-left text-xs ${
-        chosen ? 'border-indigo-300 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'
+        unavailable
+          ? 'cursor-not-allowed border-dashed border-gray-200 text-gray-400'
+          : chosen
+            ? 'border-indigo-300 bg-indigo-50'
+            : 'border-gray-200 hover:bg-gray-50'
       }`}
     >
       <span className="min-w-0 flex-1 truncate text-gray-800">{candidate.title}</span>
@@ -50,6 +61,7 @@ function CandidateRow({ candidate, chosen, onPick }) {
       {candidate.score != null && (
         <span className="tabular-nums text-gray-400">{Number(candidate.score).toFixed(2)}</span>
       )}
+      {unavailable && <span className="shrink-0 text-[10px] uppercase tracking-wide">not in registry</span>}
     </button>
   );
 }
@@ -73,7 +85,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
 
   const parse = useImportParse();
   const resolveBatch = useResolveBatch();
-  const resolveOne = useResolve();
+  const searchToAdd = useSearchToAdd();
   const { saveItems } = usePitchMutations(pitchId);
 
   // Re-seed when the server's item set changes identity (detail query settles).
@@ -174,22 +186,28 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     await resolveIndices(fresh.map((_, i) => startAt + i), { source: next });
   }
 
+  /**
+   * Manual search goes through /search-to-add — the federated catalogue search
+   * the web app's add flow uses. It was pointed at /resolve, which is the ER
+   * duplicate-checker: it answers "do we already hold this candidate?" and
+   * reports nothing for anything the matcher isn't confident about, which read
+   * as "this doesn't exist" when it usually meant "ask a different question".
+   */
   async function runSearch(query) {
     if (!query.trim()) return;
     setBusy('searching');
     try {
-      // /resolve requires a type; rows carry the parser's inferred_type when it
-      // sent one, otherwise the pitch's own thing_type.
       const type = focusedRow?.inferred_type || thingType;
-      const data = await resolveOne.mutateAsync({ type, title: query.trim() });
-      const res = normalizeResolution(data);
-      // The match leads, then the alternates — `suggestions` excludes the match
-      // itself, so showing only one or the other loses a real option.
-      const list = [res.match, ...res.candidates].filter(
-        (c, i, all) => c && all.findIndex(o => o?.thing_id === c.thing_id) === i,
-      );
-      setSearchResults(list);
-      if (list.length === 0) setNote({ ok: false, text: `No candidates for “${query.trim()}”.` });
+      const results = normalizeSearchResults(await searchToAdd.mutateAsync({ query: query.trim(), type }));
+      setSearchResults(results);
+      if (results.length === 0) {
+        setNote({ ok: false, text: `Nothing found for “${query.trim()}” — try different wording, or leave the row for the target to fix.` });
+      } else if (!results.some(r => r.in_registry)) {
+        setNote({
+          ok: false,
+          text: `Found in ${[...new Set(results.map(r => r.source).filter(Boolean))].join(', ') || 'external sources'} but not in our registry yet, so it can't be attached. Leave the row unresolved and the target gets it as editable text.`,
+        });
+      }
     } catch (err) {
       setNote({ ok: false, text: `Search failed — ${apiErrorMessage(err)}` });
     } finally {
@@ -467,7 +485,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                 <TextInput
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder={`Search registry — “${focusedRow.raw_text.slice(0, 32)}”`}
+                  placeholder={`Search catalogue — “${focusedRow.raw_text.slice(0, 32)}”`}
                 />
                 <Button type="submit" disabled={busy === 'searching'}>
                   Search

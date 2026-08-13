@@ -11,6 +11,10 @@ export default defineConfig({
         '/auth', '/admin', '/metrics', '/moderation', '/queue-stats', '/feed',
         // Concierge + verification (#533)
         '/pitches', '/verification', '/resolve', '/imports',
+        // Federated catalogue search + the canonical type vocabulary. Absent
+        // here, they 404 against the dev server while working fine in a
+        // production build, which points debugging at entirely the wrong place.
+        '/search-to-add', '/types', '/things',
       ].map(
         (path) => [
           path,
