@@ -41,6 +41,15 @@ const EMPTY = {
   notes: '',
 };
 
+function Section({ title, note }) {
+  return (
+    <div className="mt-1 mb-3 border-b border-gray-100 pb-1.5">
+      <h4 className="text-xs font-semibold tracking-wide text-gray-700 uppercase">{title}</h4>
+      <p className="mt-0.5 text-xs text-gray-400">{note}</p>
+    </div>
+  );
+}
+
 export default function IntakeModal({ open, onClose, onCreated }) {
   const [form, setForm] = useState(EMPTY);
   const [submitted, setSubmitted] = useState(false);
@@ -97,17 +106,33 @@ export default function IntakeModal({ open, onClose, onCreated }) {
     >
       {apiError && <div className="mb-3 rounded bg-red-50 p-2 text-xs text-red-700">{apiError}</div>}
 
+      {/* Two groups, because the fields split cleanly in two and the split is
+          not guessable: half stay internal, half are copied onto the list the
+          target receives when they claim it (pitchLists.js provisioning). */}
+      <Section title="Who you're pitching to" note="Internal. Never shown to the target." />
+
       <div className="grid grid-cols-2 gap-x-4">
-        <Field label="Target name" required error={show('target_name')} htmlFor="target_name">
+        <Field
+          label="Target name"
+          required
+          error={show('target_name')}
+          hint="The person or organisation, not the list."
+          htmlFor="target_name"
+        >
           <TextInput
             id="target_name"
             value={form.target_name}
             onChange={e => set('target_name', e.target.value)}
-            placeholder="Who we're rebuilding the list for"
+            placeholder="e.g. Ava Lindqvist"
           />
         </Field>
-        <Field label="Organisation" htmlFor="target_org">
-          <TextInput id="target_org" value={form.target_org} onChange={e => set('target_org', e.target.value)} />
+        <Field label="Organisation" hint="Where they do this, if relevant." htmlFor="target_org">
+          <TextInput
+            id="target_org"
+            value={form.target_org}
+            onChange={e => set('target_org', e.target.value)}
+            placeholder="e.g. Nordic Film Institute"
+          />
         </Field>
       </div>
 
@@ -125,37 +150,61 @@ export default function IntakeModal({ open, onClose, onCreated }) {
       </Field>
 
       <div className="grid grid-cols-2 gap-x-4">
-        <Field label="Source URL" hint="The public list we're rebuilding." htmlFor="source_url">
-          <TextInput id="source_url" value={form.source_url} onChange={e => set('source_url', e.target.value)} />
-        </Field>
-        <Field label="Source attribution" hint="Credit line shown on the draft." htmlFor="source_attribution">
+        <Field
+          label="Assigned to"
+          hint="The board filter matches this exactly — use whatever form the team agreed."
+          htmlFor="assigned_to"
+        >
           <TextInput
-            id="source_attribution"
-            value={form.source_attribution}
-            onChange={e => set('source_attribution', e.target.value)}
+            id="assigned_to"
+            value={form.assigned_to}
+            onChange={e => set('assigned_to', e.target.value)}
+            placeholder="e.g. gtm@listgem.com"
           />
+        </Field>
+        <Field label="Notes" hint="Anything the next person needs to know." htmlFor="notes">
+          <TextInput id="notes" value={form.notes} onChange={e => set('notes', e.target.value)} />
         </Field>
       </div>
 
-      <Field label="Proposed title" required error={show('proposed_title')} htmlFor="proposed_title">
+      <Section
+        title="The list they'll receive"
+        note="Copied into their account when they claim the draft — write it for them, not for us."
+      />
+
+      <Field
+        label="Proposed title"
+        required
+        error={show('proposed_title')}
+        hint="The list's name, as they'll see it."
+        htmlFor="proposed_title"
+      >
         <TextInput
           id="proposed_title"
           value={form.proposed_title}
           onChange={e => set('proposed_title', e.target.value)}
+          placeholder="e.g. Essential Nordic Noir"
         />
       </Field>
 
-      <Field label="Proposed description" htmlFor="proposed_description">
+      <Field label="Proposed description" hint="Optional. Sits under the title." htmlFor="proposed_description">
         <TextArea
           id="proposed_description"
           rows={2}
           value={form.proposed_description}
           onChange={e => set('proposed_description', e.target.value)}
+          placeholder="e.g. Twenty-four films that built the genre, in the order Ava lists them."
         />
       </Field>
 
       <div className="grid grid-cols-2 gap-x-4">
-        <Field label="Thing type" required error={show('thing_type')} htmlFor="thing_type">
+        <Field
+          label="Thing type"
+          required
+          error={show('thing_type')}
+          hint="One type per list. A mixed source list needs two pitches."
+          htmlFor="thing_type"
+        >
           {/* No free-text escape hatch: with the live vocabulary, anything not on
               this list can only produce a 400. */}
           <Select
@@ -171,17 +220,40 @@ export default function IntakeModal({ open, onClose, onCreated }) {
             </p>
           )}
         </Field>
-        <Field label="Category" htmlFor="category">
-          <TextInput id="category" value={form.category} onChange={e => set('category', e.target.value)} />
+        <Field label="Category" hint="Free text. Copied onto their list." htmlFor="category">
+          <TextInput
+            id="category"
+            value={form.category}
+            onChange={e => set('category', e.target.value)}
+            placeholder="e.g. crime"
+          />
         </Field>
       </div>
 
       <div className="grid grid-cols-2 gap-x-4">
-        <Field label="Assigned to" htmlFor="assigned_to">
-          <TextInput id="assigned_to" value={form.assigned_to} onChange={e => set('assigned_to', e.target.value)} />
+        <Field
+          label="Source URL"
+          hint="The exact page you're rebuilding — not the site's home page."
+          htmlFor="source_url"
+        >
+          <TextInput
+            id="source_url"
+            value={form.source_url}
+            onChange={e => set('source_url', e.target.value)}
+            placeholder="https://example.org/their-list"
+          />
         </Field>
-        <Field label="Notes" htmlFor="notes">
-          <TextInput id="notes" value={form.notes} onChange={e => set('notes', e.target.value)} />
+        <Field
+          label="Source attribution"
+          hint="Credit line on their list. Points traffic back to them — part of the pitch."
+          htmlFor="source_attribution"
+        >
+          <TextInput
+            id="source_attribution"
+            value={form.source_attribution}
+            onChange={e => set('source_attribution', e.target.value)}
+            placeholder="e.g. Nordic Film Institute, staff picks"
+          />
         </Field>
       </div>
     </Modal>
