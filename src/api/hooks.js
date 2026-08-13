@@ -458,6 +458,21 @@ export function useResolveBatch() {
   });
 }
 
+// Grant/revoke staff roles (listgem-platform#542). Body takes is_admin and/or
+// is_moderator as booleans; omitted fields are left alone. 409 when the change
+// would remove the last admin — the portal is admin-only, so that would lock
+// everyone out.
+export function useUserRoles() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, ...body }) => client.post(`/admin/users/${userId}/roles`, body).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'users'] });
+      qc.invalidateQueries({ queryKey: ['verification'] });
+    },
+  });
+}
+
 // Canonical registry vocabulary — 96 types, public, no auth. This is what
 // isValidThingType() validates against, so a picker driven from it cannot offer
 // a type POST /pitches rejects. NOT /admin/type-rules, which is crawler

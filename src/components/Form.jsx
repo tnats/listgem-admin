@@ -64,6 +64,23 @@ export function Select({ options = [], placeholder, className = '', ...props }) 
   );
 }
 
+export function Checkbox({ label, hint, id, ...props }) {
+  return (
+    <label htmlFor={id} className="mb-2 flex cursor-pointer items-start gap-2">
+      <input
+        id={id}
+        type="checkbox"
+        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-2 focus:ring-indigo-500"
+        {...props}
+      />
+      <span className="min-w-0">
+        <span className="block text-sm text-gray-800">{label}</span>
+        {hint && <span className="block text-xs text-gray-400">{hint}</span>}
+      </span>
+    </label>
+  );
+}
+
 export function Button({ variant = 'secondary', size = 'md', className = '', type = 'button', ...props }) {
   return (
     <button
