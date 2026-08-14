@@ -94,6 +94,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [urlInput, setUrlInput] = useState('');
+  const [addUrl, setAddUrl] = useState('');
 
   const parse = useImportParse();
   const resolveBatch = useResolveBatch();
@@ -206,6 +207,49 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
    * reports nothing for anything the matcher isn't confident about, which read
    * as "this doesn't exist" when it usually meant "ask a different question".
    */
+  /**
+   * Add a new item from a link. Distinct from the row editor's link box, which
+   * re-points an existing row — pasting a link to "add this film" is what the
+   * web app's composer does, so the builder needs to mean the same thing.
+   */
+  async function addRowFromUrl(url) {
+    if (!url.trim()) return;
+    setBusy('adding');
+    setNote(null);
+    try {
+      const data = await resolveOrCreate.mutateAsync({ url: url.trim() });
+      const match = normalizeCandidate({ ...(data.thing || {}), thing_id: data.thing_id });
+      const row = {
+        raw_text: match?.title || url.trim(),
+        thing_id: data.thing_id,
+        status: 'resolved',
+        candidates: [],
+        match,
+        note: '',
+        dropped: false,
+        inferred_type: match?.type || null,
+        confidence: null,
+        reason: null,
+      };
+      setRows(rs => [...rs, row]);
+      setFocus(rows.length);
+      setDirty(true);
+      setAddUrl('');
+      setNote({ ok: true, text: `Added “${row.raw_text}” as item ${rows.length + 1}.` });
+    } catch (err) {
+      const status = err?.response?.status;
+      setNote({
+        ok: false,
+        text:
+          status === 404 || status === 422
+            ? `That link doesn't match anything we hold — search by title instead, which goes through the source catalogues and produces a better entry than a crawl would.`
+            : `Could not add from that link — ${apiErrorMessage(err)}`,
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function runSearch(query) {
     if (!query.trim()) return;
     setBusy('searching');
@@ -283,9 +327,18 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     try {
       const data = await resolveOrCreate.mutateAsync({ url: url.trim() });
       const match = normalizeCandidate({ ...(data.thing || {}), thing_id: data.thing_id });
+      const replaced = focusedRow?.match?.title;
       patchRow(focus, { thing_id: data.thing_id, match, status: 'resolved' });
       setUrlInput('');
-      setNote({ ok: true, text: `Matched “${match?.title || data.thing_id}” from that link.` });
+      // Name the row and what it replaced: this changes one existing row rather
+      // than adding an item, and an unannounced overwrite of a correct match is
+      // the expensive mistake here.
+      setNote({
+        ok: true,
+        text: `Row ${focus + 1} now matches “${match?.title || data.thing_id}”${
+          replaced && replaced !== match?.title ? ` — replaced “${replaced}”` : ''
+        }.`,
+      });
     } catch (err) {
       const status = err?.response?.status;
       setNote({
@@ -449,7 +502,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       {/* Toolbar */}
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={() => setShowPaste(s => !s)}>{showPaste ? 'Hide paste box' : 'Paste more text'}</Button>
+          <Button onClick={() => setShowPaste(s => !s)}>{showPaste ? 'Hide add panel' : 'Add items'}</Button>
           <Button
             disabled={unresolvedIndices.length === 0 || !!busy}
             onClick={() => resolveIndices(unresolvedIndices)}
@@ -505,6 +558,30 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
               </Button>
             )}
           </div>
+
+          <form
+            className="mt-3 border-t border-gray-100 pt-3"
+            onSubmit={e => {
+              e.preventDefault();
+              addRowFromUrl(addUrl);
+            }}
+          >
+            <Field
+              label="Or add one item by link"
+              hint="IMDb, TMDB, Spotify… Matched on the identifier in the link, so an IMDb URL finds a film we ingested from TMDB. Appends a new item."
+            >
+              <div className="flex gap-2">
+                <TextInput
+                  value={addUrl}
+                  onChange={e => setAddUrl(e.target.value)}
+                  placeholder="https://www.imdb.com/title/tt0114814/"
+                />
+                <Button type="submit" disabled={!!busy || !addUrl.trim()}>
+                  {busy === 'adding' ? 'Adding…' : 'Add item'}
+                </Button>
+              </div>
+            </Field>
+          </form>
         </div>
       )}
 
@@ -593,10 +670,10 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                 <TextInput
                   value={urlInput}
                   onChange={e => setUrlInput(e.target.value)}
-                  placeholder="…or paste a link (IMDb, TMDB, Spotify…)"
+                  placeholder={`Re-point row ${focus + 1} using a link`}
                 />
                 <Button type="submit" disabled={!!busy || !urlInput.trim()}>
-                  Match
+                  Re-point
                 </Button>
               </form>
               <TextInput

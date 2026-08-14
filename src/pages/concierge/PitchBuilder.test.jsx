@@ -70,6 +70,55 @@ describe('builder — adding a thing we do not hold yet', () => {
     expect(screen.getAllByText('Resolved').length).toBeGreaterThan(0);
   });
 
+  it('adds a NEW item from a link rather than re-pointing an existing row', async () => {
+    // Reported: pasting an IMDb link said "Matched The Usual Suspects" and
+    // nothing appeared in the list — because the only link box re-pointed the
+    // focused row, silently replacing whatever it already matched.
+    client.get.mockRejectedValue(new Error('no search'));
+    client.post.mockResolvedValue({
+      data: {
+        thing_id: 'movie_usual_suspects_1995_c3',
+        created: false,
+        via: 'canonical_id',
+        thing: { thing_id: 'movie_usual_suspects_1995_c3', title: 'The Usual Suspects', type: 'Movie', year: 1995 },
+      },
+    });
+    build();
+    // The add panel is collapsed once a pitch has items — this is the path an
+    // operator takes to add one more.
+    fireEvent.click(screen.getByRole('button', { name: /add items/i }));
+
+    fireEvent.change(screen.getByPlaceholderText(/imdb\.com\/title/i), {
+      target: { value: 'https://www.imdb.com/title/tt0114814/' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /add item/i }));
+
+    expect(await screen.findByText(/Added .*The Usual Suspects.* as item 2/i)).toBeTruthy();
+    // The original row is untouched, and there are now two.
+    expect(screen.getByText('Some obscure film')).toBeTruthy();
+    expect(screen.getAllByText('The Usual Suspects').length).toBeGreaterThan(0);
+  });
+
+  it('names the row and what it replaced when re-pointing', async () => {
+    client.get.mockRejectedValue(new Error('no search'));
+    client.post.mockResolvedValue({
+      data: {
+        thing_id: 'movie_usual_suspects_1995_c3',
+        created: false,
+        thing: { thing_id: 'movie_usual_suspects_1995_c3', title: 'The Usual Suspects', type: 'Movie' },
+      },
+    });
+    build();
+    fireEvent.change(screen.getByPlaceholderText(/Re-point row 1/i), {
+      target: { value: 'https://www.imdb.com/title/tt0114814/' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /re-point/i }));
+
+    // Says which row changed — an unannounced overwrite of a correct match is
+    // the expensive mistake here.
+    expect(await screen.findByText(/Row 1 now matches .*The Usual Suspects/i)).toBeTruthy();
+  });
+
   it('matches a pasted link against canonical ids', async () => {
     client.get.mockRejectedValue(new Error('no search'));
     client.post.mockResolvedValue({
@@ -81,17 +130,17 @@ describe('builder — adding a thing we do not hold yet', () => {
       },
     });
     build();
-    fireEvent.change(screen.getByPlaceholderText(/paste a link/i), {
+    fireEvent.change(screen.getByPlaceholderText(/Re-point row 1/i), {
       target: { value: 'https://www.imdb.com/title/tt0133093/' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /^match$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /re-point/i }));
 
     await vi.waitFor(() =>
       expect(client.post).toHaveBeenCalledWith('/things/resolve-or-create', {
         url: 'https://www.imdb.com/title/tt0133093/',
       }),
     );
-    expect(await screen.findByText(/Matched .*The Matrix/i)).toBeTruthy();
+    expect(await screen.findByText(/Row 1 now matches .*The Matrix/i)).toBeTruthy();
   });
 
   it('on a link miss, points at search rather than offering a crawl', async () => {
@@ -101,10 +150,10 @@ describe('builder — adding a thing we do not hold yet', () => {
     client.get.mockRejectedValue(new Error('no search'));
     client.post.mockRejectedValue({ response: { status: 404, data: { found: false } } });
     build();
-    fireEvent.change(screen.getByPlaceholderText(/paste a link/i), {
+    fireEvent.change(screen.getByPlaceholderText(/Re-point row 1/i), {
       target: { value: 'https://example.com/nothing' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /^match$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /re-point/i }));
 
     expect(await screen.findByText(/search by title instead/i)).toBeTruthy();
     // No crawl-and-create affordance: the endpoint supports it behind
