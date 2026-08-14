@@ -205,3 +205,68 @@ describe('builder — the link box says what it will do', () => {
     expect(screen.getByRole('button', { name: /re-point/i })).toBeTruthy();
   });
 });
+
+describe('builder — unresolved rows search themselves', () => {
+  const TWO = [
+    { raw_text: 'Persona (1966) 🇸🇪 8.6/10', thing_id: null, resolution_status: 'unresolved', position: 0 },
+    { raw_text: 'The Hunt (2012)', thing_id: 'movie_the_hunt_2012_aa', resolution_status: 'resolved', position: 1 },
+  ];
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.post.mockReset();
+    client.get.mockResolvedValue({ data: { results: [] } });
+  });
+
+  it('pre-fills the box with the cleaned title, not the raw text', () => {
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={TWO} />);
+    expect(screen.getByDisplayValue('Persona')).toBeTruthy();
+  });
+
+  it('runs the search itself once focus settles on an unresolved row', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={TWO} />);
+    expect(client.get).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(700);
+    await vi.waitFor(() =>
+      expect(client.get).toHaveBeenCalledWith('/search-to-add', {
+        params: { query: 'Persona', type: 'Movie', limit: 10 },
+      }),
+    );
+    vi.useRealTimers();
+  });
+
+  it('does not search a row that already resolved', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // Row 2 is resolved; focusing it should spend nothing.
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={[TWO[1]]} />);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(client.get).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('spends nothing on rows passed through by keyboard', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const many = Array.from({ length: 6 }, (_, i) => ({
+      raw_text: `Unmatched ${i}`,
+      thing_id: null,
+      resolution_status: 'unresolved',
+      position: i,
+    }));
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={many} />);
+
+    // j j j j — straight past four rows inside the settle window.
+    for (let i = 0; i < 4; i++) {
+      fireEvent.keyDown(window, { key: 'j' });
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    expect(client.get).not.toHaveBeenCalled();
+
+    // …and one search once it settles, for the row actually landed on.
+    await vi.advanceTimersByTimeAsync(700);
+    await vi.waitFor(() => expect(client.get).toHaveBeenCalledTimes(1));
+    expect(client.get.mock.calls[0][1].params.query).toBe('Unmatched 4');
+    vi.useRealTimers();
+  });
+});

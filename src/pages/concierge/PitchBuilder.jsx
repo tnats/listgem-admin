@@ -34,6 +34,11 @@ const RECHECK_DELAYS_MS = [6000, 10000, 14000, 20000, 20000];
 // target. Not a threshold the API applies — purely a prompt to the operator.
 const LOW_CONFIDENCE = 0.7;
 
+// How long focus must settle on a row before its search fires by itself.
+// /search-to-add allows 20/min per user and each call spends external API quota,
+// so j/k down a dozen unresolved rows must not spend a dozen searches.
+const AUTOSEARCH_SETTLE_MS = 600;
+
 function StatusPill({ status }) {
   const spec = ROW_STATUS[status] || ROW_STATUS.unresolved;
   return <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${spec.cls}`}>{spec.label}</span>;
@@ -124,6 +129,20 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
 
   const counts = summarize(rows);
   const focusedRow = rows[focus];
+  const prefill = focusedRow ? searchTitle(focusedRow.raw_text) : '';
+
+  // Moving to another row re-arms the box for that row: the previous row's
+  // query and results are meaningless here. Keyed on the row's identity rather
+  // than its index, so the first render arms too and a re-seed that changes the
+  // row under the cursor doesn't leave a stale query behind. Render-phase, not
+  // an effect.
+  const searchKey = `${focus}:${focusedRow?.raw_text ?? ''}`;
+  const [armedFor, setArmedFor] = useState(null);
+  if (searchKey !== armedFor) {
+    setArmedFor(searchKey);
+    setSearch(prefill);
+    setSearchResults(null);
+  }
 
   const patchRow = useCallback((index, patch) => {
     setRows(rs => rs.map((r, i) => (i === index ? { ...r, ...patch } : r)));
@@ -397,6 +416,33 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       setBusy(null);
     }
   }
+
+  /**
+   * Search by itself when a row needs it and offers nothing to pick from — the
+   * operator's only moves there are find a match, leave it, or drop it.
+   *
+   * Guarded, because /search-to-add is rate-limited and externally metered:
+   * only unresolved rows, only when the batch returned no candidates, once per
+   * row per session, and only after focus has settled so keyboard navigation
+   * doesn't spend the budget on rows passed through.
+   */
+  const autoSearched = useRef(new Set());
+  const autoRef = useRef(null);
+  useEffect(() => { autoRef.current = { focusedRow, prefill, runSearch, busy, readOnly }; });
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const api = autoRef.current;
+      if (!api || api.readOnly || api.busy) return;
+      const row = api.focusedRow;
+      if (!row || row.dropped || row.thing_id || row.status === 'pending') return;
+      if (row.candidates?.length) return;
+      const key = `${focus}:${row.raw_text}`;
+      if (!api.prefill || autoSearched.current.has(key)) return;
+      autoSearched.current.add(key);
+      api.runSearch(api.prefill);
+    }, AUTOSEARCH_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [focus, rows.length]);
 
   // Keyboard-first: staff review fifty rows at a time. Handlers live in a ref so
   // the listener binds once.
