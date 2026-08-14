@@ -502,7 +502,16 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       {/* Toolbar */}
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={() => setShowPaste(s => !s)}>{showPaste ? 'Hide add panel' : 'Add items'}</Button>
+          {/* The only control in this row that brings new content in; the rest act
+              on what's already there. Styled apart because it was being lost
+              among them — the add-by-link box lives inside this panel, and an
+              operator looking for it couldn't find it. */}
+          <Button
+            onClick={() => setShowPaste(s => !s)}
+            className="border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+          >
+            {showPaste ? '× Hide add panel' : '+ Add items or a link'}
+          </Button>
           <Button
             disabled={unresolvedIndices.length === 0 || !!busy}
             onClick={() => resolveIndices(unresolvedIndices)}

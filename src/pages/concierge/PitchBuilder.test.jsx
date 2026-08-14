@@ -86,7 +86,7 @@ describe('builder — adding a thing we do not hold yet', () => {
     build();
     // The add panel is collapsed once a pitch has items — this is the path an
     // operator takes to add one more.
-    fireEvent.click(screen.getByRole('button', { name: /add items/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add items or a link/i }));
 
     fireEvent.change(screen.getByPlaceholderText(/imdb\.com\/title/i), {
       target: { value: 'https://www.imdb.com/title/tt0114814/' },
