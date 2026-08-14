@@ -283,6 +283,33 @@ export function chunkForBatch(indices: number[], size: number = BATCH_LIMIT): nu
 }
 
 /**
+ * The text to match on, cleaned of list decoration.
+ *
+ * Source lists carry ratings, flags and bullets — `Persona (1966) 🇸🇪 8.6/10`.
+ * Sending that whole string as the title degrades every stage: the ER matcher's
+ * trigram similarity collapses, the vector distance widens, and
+ * `filterSuggestions` then drops the alternates too, so a bad match arrives with
+ * nothing to correct it. Short titles suffer worst — the noise outweighs them.
+ *
+ * `raw_text` is left untouched: it's what the operator recognises, and what the
+ * target inherits on an unresolved row.
+ */
+export function searchTitle(rawText: string): string {
+  return (rawText || '')
+    // leading list decoration the parser may leave behind
+    .replace(/^\s*(?:\d+[.)]|[-*•–—])\s*/, '')
+    // ratings: 8.6/10, 4/5, 92%
+    .replace(/\b\d+(?:\.\d+)?\s*\/\s*\d+\b/g, '')
+    .replace(/\b\d{1,3}\s*%/g, '')
+    // emoji and flags (regional indicators, pictographs, misc symbols)
+    .replace(/[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
+    // whatever separators the decoration left stranded
+    .replace(/\s*[|·–—-]\s*$/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/**
  * `candidates` for POST /resolve/batch. `type` is required per candidate, and
  * the builder has no per-row type of its own — it uses the parser's
  * `inferred_type` when there is one and the pitch's `thing_type` otherwise.
@@ -294,7 +321,7 @@ export function toBatchPayload(
 ): ResolveRequest[] {
   return indices.map(rowIndex => ({
     type: rows[rowIndex].inferred_type || fallbackType,
-    title: rows[rowIndex].raw_text,
+    title: searchTitle(rows[rowIndex].raw_text),
   }));
 }
 

@@ -10,6 +10,7 @@ import {
   pendingIndices,
   rowsFromItems,
   rowsFromParsed,
+  searchTitle,
   summarize,
   toBatchPayload,
   toItemsPayload,
@@ -327,5 +328,45 @@ describe('federated search results (GET /search-to-add)', () => {
     // by definition already in the graph.
     const res = normalizeResolution({ status: 'no_match', suggestions: [{ thing_id: 'thing_a', title: 'A' }] });
     expect(res.candidates[0].in_registry).toBe(true);
+  });
+});
+
+describe('searchTitle — list decoration wrecks the match', () => {
+  // Real rows from a Nordic-noir source list. Sending the whole string as the
+  // title collapsed the trigram similarity, widened the vector distance, and
+  // filterSuggestions then dropped the alternates too — so a wrong match
+  // arrived with nothing to correct it.
+  it('strips ratings and flags, keeps the title and year', () => {
+    expect(searchTitle('Persona (1966) 🇸🇪 8.6/10')).toBe('Persona (1966)');
+    expect(searchTitle('Fanny & Alexander (1982) 🇸🇪 9.1/10')).toBe('Fanny & Alexander (1982)');
+    expect(searchTitle('The Hunt (2012) 🇩🇰 8.5/10')).toBe('The Hunt (2012)');
+  });
+
+  it('strips leading list decoration the parser leaves behind', () => {
+    expect(searchTitle('1. The Celebration (1998)')).toBe('The Celebration (1998)');
+    expect(searchTitle('— Let the Right One In')).toBe('Let the Right One In');
+    expect(searchTitle('• Insomnia')).toBe('Insomnia');
+  });
+
+  it('handles other rating notations', () => {
+    expect(searchTitle('Dune 4/5')).toBe('Dune');
+    expect(searchTitle('Sapiens 92%')).toBe('Sapiens');
+  });
+
+  it('leaves a clean title alone', () => {
+    expect(searchTitle('The Matrix')).toBe('The Matrix');
+    expect(searchTitle("The Emigrants + The New Land (1971, 1972)")).toBe('The Emigrants + The New Land (1971, 1972)');
+  });
+
+  it('never returns junk for junk', () => {
+    expect(searchTitle('')).toBe('');
+    expect(searchTitle('   🇸🇪  8.6/10 ')).toBe('');
+  });
+
+  it('is what the batch payload sends, while raw_text is preserved', () => {
+    const rows = rowsFromParsed([{ position: 0, raw_text: 'Persona (1966) 🇸🇪 8.6/10', inferred_type: null }]);
+    expect(toBatchPayload(rows, [0], 'Movie')).toEqual([{ type: 'Movie', title: 'Persona (1966)' }]);
+    // The operator still sees what they pasted, and so does the target.
+    expect(rows[0].raw_text).toBe('Persona (1966) 🇸🇪 8.6/10');
   });
 });
