@@ -10,6 +10,7 @@ import {
   pendingIndices,
   rowsFromItems,
   rowsFromParsed,
+  extractYear,
   searchTitle,
   summarize,
   toBatchPayload,
@@ -96,6 +97,9 @@ describe('the shapes prod actually returns', () => {
       { type: 'Movie', title: 'The Matrix' },
       { type: 'TVSeries', title: 'Slow Horses' },
     ]);
+    // …and the year rides as its own field when the text carries one.
+    const dated = rowsFromParsed([{ position: 0, raw_text: 'Arrival (2016)', inferred_type: null }]);
+    expect(toBatchPayload(dated, [0], 'Movie')).toEqual([{ type: 'Movie', title: 'Arrival', year: 2016 }]);
   });
 });
 
@@ -336,14 +340,23 @@ describe('searchTitle — list decoration wrecks the match', () => {
   // title collapsed the trigram similarity, widened the vector distance, and
   // filterSuggestions then dropped the alternates too — so a wrong match
   // arrived with nothing to correct it.
-  it('strips ratings and flags, keeps the title and year', () => {
-    expect(searchTitle('Persona (1966) 🇸🇪 8.6/10')).toBe('Persona (1966)');
-    expect(searchTitle('Fanny & Alexander (1982) 🇸🇪 9.1/10')).toBe('Fanny & Alexander (1982)');
-    expect(searchTitle('The Hunt (2012) 🇩🇰 8.5/10')).toBe('The Hunt (2012)');
+  it('strips ratings, flags and the year, leaving a bare title', () => {
+    // Registry titles are bare, and TMDB's search doesn't parse "(1966)" — it
+    // matched nothing at all for Persona. The year travels as its own field.
+    expect(searchTitle('Persona (1966) 🇸🇪 8.6/10')).toBe('Persona');
+    expect(searchTitle('Fanny & Alexander (1982) 🇸🇪 9.1/10')).toBe('Fanny & Alexander');
+    expect(searchTitle('The Hunt (2012) 🇩🇰 8.5/10')).toBe('The Hunt');
+    expect(searchTitle('The Emigrants + The New Land (1971, 1972)')).toBe('The Emigrants + The New Land');
+  });
+
+  it('pulls the year out separately', () => {
+    expect(extractYear('Persona (1966) 🇸🇪 8.6/10')).toBe(1966);
+    expect(extractYear('The Emigrants + The New Land (1971, 1972)')).toBe(1971);
+    expect(extractYear('The Matrix')).toBeNull();
   });
 
   it('strips leading list decoration the parser leaves behind', () => {
-    expect(searchTitle('1. The Celebration (1998)')).toBe('The Celebration (1998)');
+    expect(searchTitle('1. The Celebration (1998)')).toBe('The Celebration');
     expect(searchTitle('— Let the Right One In')).toBe('Let the Right One In');
     expect(searchTitle('• Insomnia')).toBe('Insomnia');
   });
@@ -355,7 +368,7 @@ describe('searchTitle — list decoration wrecks the match', () => {
 
   it('leaves a clean title alone', () => {
     expect(searchTitle('The Matrix')).toBe('The Matrix');
-    expect(searchTitle("The Emigrants + The New Land (1971, 1972)")).toBe('The Emigrants + The New Land (1971, 1972)');
+    expect(searchTitle('The Matrix Reloaded')).toBe('The Matrix Reloaded');
   });
 
   it('never returns junk for junk', () => {
@@ -365,7 +378,7 @@ describe('searchTitle — list decoration wrecks the match', () => {
 
   it('is what the batch payload sends, while raw_text is preserved', () => {
     const rows = rowsFromParsed([{ position: 0, raw_text: 'Persona (1966) 🇸🇪 8.6/10', inferred_type: null }]);
-    expect(toBatchPayload(rows, [0], 'Movie')).toEqual([{ type: 'Movie', title: 'Persona (1966)' }]);
+    expect(toBatchPayload(rows, [0], 'Movie')).toEqual([{ type: 'Movie', title: 'Persona', year: 1966 }]);
     // The operator still sees what they pasted, and so does the target.
     expect(rows[0].raw_text).toBe('Persona (1966) 🇸🇪 8.6/10');
   });
