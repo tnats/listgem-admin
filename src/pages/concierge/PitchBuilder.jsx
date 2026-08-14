@@ -17,6 +17,7 @@ import {
   normalizeCandidate,
   normalizeParsed,
   normalizeSearchResults,
+  searchTitle,
   pendingIndices,
   rowsFromItems,
   rowsFromParsed,
@@ -28,6 +29,10 @@ import {
 // The 60s server deadline for `pending`, walked in widening steps. Re-request
 // those indices — a pending row is not an unresolved row.
 const RECHECK_DELAYS_MS = [6000, 10000, 14000, 20000, 20000];
+
+// Below this, a "Resolved" row is worth a second look before it reaches the
+// target. Not a threshold the API applies — purely a prompt to the operator.
+const LOW_CONFIDENCE = 0.7;
 
 function StatusPill({ status }) {
   const spec = ROW_STATUS[status] || ROW_STATUS.unresolved;
@@ -431,7 +436,28 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
           <span className="text-gray-300">—</span>
         ),
     },
-    { key: 'status', header: 'Status', width: 'w-24', render: row => <StatusPill status={row.status} /> },
+    {
+      key: 'status',
+      header: 'Status',
+      width: 'w-32',
+      render: row => (
+        <span className="flex items-center gap-1.5">
+          <StatusPill status={row.status} />
+          {/* A match at 0.4 and one at 1.0 both read as "Resolved" otherwise —
+              and a confident-looking wrong match is the expensive kind. */}
+          {row.confidence != null && row.status === 'resolved' && (
+            <span
+              className={`text-[11px] tabular-nums ${
+                row.confidence < LOW_CONFIDENCE ? 'font-medium text-amber-600' : 'text-gray-400'
+              }`}
+              title={row.confidence < LOW_CONFIDENCE ? 'Low confidence — check the year and creator' : 'Match confidence'}
+            >
+              {Number(row.confidence).toFixed(2)}
+            </span>
+          )}
+        </span>
+      ),
+    },
     {
       key: 'cands',
       header: 'Alts',
@@ -641,13 +667,13 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                 className="flex gap-2"
                 onSubmit={e => {
                   e.preventDefault();
-                  runSearch(search || focusedRow.raw_text);
+                  runSearch(search || searchTitle(focusedRow.raw_text));
                 }}
               >
                 <TextInput
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder={`Search catalogue — “${focusedRow.raw_text.slice(0, 32)}”`}
+                  placeholder={`Search catalogue — “${searchTitle(focusedRow.raw_text).slice(0, 32)}”`}
                 />
                 <Button type="submit" disabled={busy === 'searching'}>
                   Search
@@ -695,7 +721,16 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                 Resolving as <span className="font-medium text-gray-500">{focusedRow.inferred_type || thingType}</span>
                 {focusedRow.reason && <> · server said <span className="text-gray-500">{focusedRow.reason}</span></>}
                 {focusedRow.confidence != null && (
-                  <> · confidence <span className="tabular-nums text-gray-500">{focusedRow.confidence}</span></>
+                  <>
+                    {' '}· confidence{' '}
+                    <span
+                      className={`tabular-nums ${
+                        focusedRow.confidence < LOW_CONFIDENCE ? 'font-medium text-amber-600' : 'text-gray-500'
+                      }`}
+                    >
+                      {Number(focusedRow.confidence).toFixed(2)}
+                    </span>
+                  </>
                 )}
               </div>
             </div>
