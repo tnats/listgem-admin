@@ -340,9 +340,9 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       // the expensive mistake here.
       setNote({
         ok: true,
-        text: `Row ${focus + 1} now matches “${match?.title || data.thing_id}”${
-          replaced && replaced !== match?.title ? ` — replaced “${replaced}”` : ''
-        }.`,
+        text: replaced && replaced !== match?.title
+          ? `Row ${focus + 1} re-pointed to “${match?.title || data.thing_id}” — replaced “${replaced}”.`
+          : `Row ${focus + 1} matched to “${match?.title || data.thing_id}”.`,
       });
     } catch (err) {
       const status = err?.response?.status;
@@ -702,13 +702,21 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                   resolveFromUrl(urlInput);
                 }}
               >
+                {/* "Re-point" only makes sense for a row that already points
+                    somewhere. On an unresolved row there is nothing to re-point,
+                    and that wording hid the box from an operator looking for a
+                    way to match one. */}
                 <TextInput
                   value={urlInput}
                   onChange={e => setUrlInput(e.target.value)}
-                  placeholder={`Re-point row ${focus + 1} using a link`}
+                  placeholder={
+                    focusedRow.thing_id
+                      ? `Re-point row ${focus + 1} using a link`
+                      : `Match row ${focus + 1} using a link (IMDb, TMDB…)`
+                  }
                 />
                 <Button type="submit" disabled={!!busy || !urlInput.trim()}>
-                  Re-point
+                  {focusedRow.thing_id ? 'Re-point' : 'Match'}
                 </Button>
               </form>
               <TextInput

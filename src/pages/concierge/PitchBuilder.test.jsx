@@ -99,7 +99,7 @@ describe('builder — adding a thing we do not hold yet', () => {
     expect(screen.getAllByText('The Usual Suspects').length).toBeGreaterThan(0);
   });
 
-  it('names the row and what it replaced when re-pointing', async () => {
+  it('names the row it matched, and what it replaced when re-pointing', async () => {
     client.get.mockRejectedValue(new Error('no search'));
     client.post.mockResolvedValue({
       data: {
@@ -109,14 +109,14 @@ describe('builder — adding a thing we do not hold yet', () => {
       },
     });
     build();
-    fireEvent.change(screen.getByPlaceholderText(/Re-point row 1/i), {
+    fireEvent.change(screen.getByPlaceholderText(/Match row 1 using a link/i), {
       target: { value: 'https://www.imdb.com/title/tt0114814/' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /re-point/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^match$/i }));
 
     // Says which row changed — an unannounced overwrite of a correct match is
     // the expensive mistake here.
-    expect(await screen.findByText(/Row 1 now matches .*The Usual Suspects/i)).toBeTruthy();
+    expect(await screen.findByText(/Row 1 matched to .*The Usual Suspects/i)).toBeTruthy();
   });
 
   it('matches a pasted link against canonical ids', async () => {
@@ -130,17 +130,17 @@ describe('builder — adding a thing we do not hold yet', () => {
       },
     });
     build();
-    fireEvent.change(screen.getByPlaceholderText(/Re-point row 1/i), {
+    fireEvent.change(screen.getByPlaceholderText(/Match row 1 using a link/i), {
       target: { value: 'https://www.imdb.com/title/tt0133093/' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /re-point/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^match$/i }));
 
     await vi.waitFor(() =>
       expect(client.post).toHaveBeenCalledWith('/things/resolve-or-create', {
         url: 'https://www.imdb.com/title/tt0133093/',
       }),
     );
-    expect(await screen.findByText(/Row 1 now matches .*The Matrix/i)).toBeTruthy();
+    expect(await screen.findByText(/Row 1 matched to .*The Matrix/i)).toBeTruthy();
   });
 
   it('on a link miss, points at search rather than offering a crawl', async () => {
@@ -150,14 +150,39 @@ describe('builder — adding a thing we do not hold yet', () => {
     client.get.mockRejectedValue(new Error('no search'));
     client.post.mockRejectedValue({ response: { status: 404, data: { found: false } } });
     build();
-    fireEvent.change(screen.getByPlaceholderText(/Re-point row 1/i), {
+    fireEvent.change(screen.getByPlaceholderText(/Match row 1 using a link/i), {
       target: { value: 'https://example.com/nothing' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /re-point/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^match$/i }));
 
     expect(await screen.findByText(/search by title instead/i)).toBeTruthy();
     // No crawl-and-create affordance: the endpoint supports it behind
     // { create: true }, and we deliberately don't offer the worse path.
     expect(screen.queryByRole('button', { name: /crawl|create/i })).toBeNull();
+  });
+});
+
+describe('builder — the link box says what it will do', () => {
+  beforeEach(() => {
+    client.get.mockReset();
+    client.post.mockReset();
+    client.get.mockRejectedValue(new Error('no search'));
+  });
+
+  // "Re-point" presumes the row already points somewhere. On an unresolved row
+  // it hid the box from an operator looking for a way to match one.
+  it('offers to MATCH a row that resolved to nothing', () => {
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={ITEMS} />);
+    expect(screen.getByPlaceholderText(/Match row 1 using a link/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^match$/i })).toBeTruthy();
+  });
+
+  it('offers to RE-POINT a row that already has a match', () => {
+    const resolved = [
+      { raw_text: 'Persona', thing_id: 'movie_persona_1966_aa', resolution_status: 'resolved', position: 0 },
+    ];
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={resolved} />);
+    expect(screen.getByPlaceholderText(/Re-point row 1 using a link/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /re-point/i })).toBeTruthy();
   });
 });
