@@ -45,6 +45,9 @@ export interface Candidate {
   in_registry: boolean;
   /** 'local' for a registry hit, otherwise the external source that found it. */
   source: string | null;
+  /** e.g. 'tmdb_movie' — what POST /things/resolve-or-create keys on. */
+  source_type: string | null;
+  source_id: string | null;
 }
 
 /** One line in the builder table. The builder holds the ordering. */
@@ -167,6 +170,8 @@ export function normalizeCandidate(raw: unknown): Candidate | null {
     // definition; only /search-to-add says so explicitly.
     in_registry: typeof src.in_registry === 'boolean' ? src.in_registry : !!thingId,
     source: firstString(src.source),
+    source_type: firstString(src.source_type),
+    source_id: src.source_id == null ? null : String(src.source_id),
   };
 }
 
