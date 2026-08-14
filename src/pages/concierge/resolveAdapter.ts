@@ -85,6 +85,7 @@ export interface ParsedCandidate {
 export interface ResolveRequest {
   type: string;
   title: string;
+  year?: number;
 }
 
 /** PUT /pitches/:id/items element. `resolution_status` is only ever these two. */
@@ -291,6 +292,11 @@ export function chunkForBatch(indices: number[], size: number = BATCH_LIMIT): nu
  * `filterSuggestions` then drops the alternates too, so a bad match arrives with
  * nothing to correct it. Short titles suffer worst — the noise outweighs them.
  *
+ * The year comes out too, and travels as its own field — see `extractYear`.
+ * Registry titles are bare ("Persona", not "Persona (1966)"), so a parenthetical
+ * year lowers the trigram similarity it was meant to sharpen, and TMDB's search
+ * doesn't parse it at all: "Persona (1966)" matches nothing there.
+ *
  * `raw_text` is left untouched: it's what the operator recognises, and what the
  * target inherits on an unresolved row.
  */
@@ -303,10 +309,18 @@ export function searchTitle(rawText: string): string {
     .replace(/\b\d{1,3}\s*%/g, '')
     // emoji and flags (regional indicators, pictographs, misc symbols)
     .replace(/[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
+    // a trailing year, or a run of them: "(1971, 1972)"
+    .replace(/\s*\((?:\s*(?:19|20)\d{2}\s*,?)+\)\s*/g, ' ')
     // whatever separators the decoration left stranded
     .replace(/\s*[|·–—-]\s*$/, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+/** The first four-digit year in the text, which the API takes as its own field. */
+export function extractYear(rawText: string): number | null {
+  const m = (rawText || '').match(/\b(19|20)\d{2}\b/);
+  return m ? Number(m[0]) : null;
 }
 
 /**
@@ -319,10 +333,15 @@ export function toBatchPayload(
   indices: number[],
   fallbackType: string,
 ): ResolveRequest[] {
-  return indices.map(rowIndex => ({
-    type: rows[rowIndex].inferred_type || fallbackType,
-    title: searchTitle(rows[rowIndex].raw_text),
-  }));
+  return indices.map(rowIndex => {
+    const raw = rows[rowIndex].raw_text;
+    const year = extractYear(raw);
+    return {
+      type: rows[rowIndex].inferred_type || fallbackType,
+      title: searchTitle(raw),
+      ...(year ? { year } : {}),
+    };
+  });
 }
 
 /** Unwrap the batch response container — array, `{ results }` or `{ items }`. */
