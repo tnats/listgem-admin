@@ -143,22 +143,41 @@ describe('builder — adding a thing we do not hold yet', () => {
     expect(await screen.findByText(/Row 1 matched to .*The Matrix/i)).toBeTruthy();
   });
 
-  it('on a link miss, points at search rather than offering a crawl', async () => {
-    // The API will not mint a Thing from a link's metadata — one built from thin
-    // OG tags is a permanent low-quality registry entry. Searching produces a
-    // better one, so the UI must not offer the worse path.
-    client.get.mockRejectedValue(new Error('no search'));
-    client.post.mockRejectedValue({ response: { status: 404, data: { found: false } } });
+  it('on a 404 says what it read, then runs the search itself', async () => {
+    // A 404 means we read the identifier and don't hold the thing — a coverage
+    // gap, not a bad link. The film is in TMDB, so searching lands the operator
+    // on a result they can add in one click. Describing that is worse than
+    // doing it.
+    client.post.mockRejectedValue({
+      response: { status: 404, data: { found: false, canonical_ids: { imdb_id: 'tt0060827' } } },
+    });
+    client.get.mockResolvedValue({
+      data: { results: [{ thing_id: null, title: 'Persona', type: 'Movie', year: 1966, source: 'tmdb', source_type: 'tmdb_movie', source_id: 605, in_registry: false }] },
+    });
     build();
     fireEvent.change(screen.getByPlaceholderText(/Match row 1 using a link/i), {
-      target: { value: 'https://example.com/nothing' },
+      target: { value: 'https://www.imdb.com/title/tt0060827/?ref_=fn_t_2' },
     });
     fireEvent.click(screen.getByRole('button', { name: /^match$/i }));
 
-    expect(await screen.findByText(/search by title instead/i)).toBeTruthy();
-    // No crawl-and-create affordance: the endpoint supports it behind
-    // { create: true }, and we deliberately don't offer the worse path.
-    expect(screen.queryByRole('button', { name: /crawl|create/i })).toBeNull();
+    expect(await screen.findByText(/Link read \(imdb_id tt0060827\) but not in our registry/i)).toBeTruthy();
+    // …and the search ran, so the addable result is already on screen.
+    expect(await screen.findByTitle(/Not in the registry yet/i)).toBeTruthy();
+    // Still no crawl-and-create affordance: the API supports it behind
+    // { create: true } and it produces a worse entry than the source APIs.
+    expect(screen.queryByRole('button', { name: /crawl/i })).toBeNull();
+  });
+
+  it('a link with no identifier is a different problem, and says so', async () => {
+    client.get.mockRejectedValue(new Error('no search'));
+    client.post.mockRejectedValue({ response: { status: 422, data: { error: 'No canonical id in that URL' } } });
+    build();
+    fireEvent.change(screen.getByPlaceholderText(/Match row 1 using a link/i), {
+      target: { value: 'https://example.com/some-blog-post' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^match$/i }));
+
+    expect(await screen.findByText(/No identifier in that link/i)).toBeTruthy();
   });
 });
 
