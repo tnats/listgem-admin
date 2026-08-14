@@ -36,6 +36,35 @@ pressure, and `eslint.config.js` has a `**/*.{ts,tsx}` block so they don't silen
 `npm run typecheck`. The tests stay `.js` on purpose: several feed deliberately malformed input to the
 validators, which is the behaviour being asserted.
 
+## Before you open a PR: does the playbook still hold?
+
+`listgem-website/docs/gtm/CONCIERGE-PLAYBOOK.md` is the operator manual for these
+screens. **If a change alters what an operator sees or does, update the playbook in the same PR.**
+
+This is written down because it has been got wrong three times in four days, each time by a change
+made here:
+
+| Change | What the playbook then said, wrongly |
+|---|---|
+| Assignee became a dropdown (#20) | "Agree one form as a team — the filter matches exactly" |
+| Roles landed on the Users tab (#21) | "Ask engineering — there's no self-serve path and no API for it" |
+| Search + add-by-link (#22/#23/#24) | "Add by URL — resolution works from titles, not links" |
+
+None was caught by tests, review or CI, because none is a code defect. Each was found by an operator
+following an instruction that had stopped being true — which is the expensive way to find it, and the
+one that costs someone else's time rather than ours.
+
+Worth checking whenever a PR touches:
+
+- **A control's label, or what it does** — the two link boxes needed a table in §4 precisely because
+  they were confusable on screen
+- **An error or empty state** — "nothing found" changed meaning when search moved to `/search-to-add`,
+  and an operator would act differently on the new meaning
+- **Who can do something, or how they get access** — §0
+- **Anything the API now permits that it didn't**, or vice versa
+
+A one-line diff in the playbook is cheap. Discovering the drift by watching someone follow it is not.
+
 ## Where the invariants live
 
 Each one is enforced by the API too — the UI's job is to never offer the action.

@@ -58,6 +58,8 @@ src/
     ├── seeding/      # Registry seed management
     ├── worker/       # Worker health + queue stats
     ├── concierge/    # Pitch outreach board, builder, tokens (#434/#533)
+    │                 # Changing an operator-facing screen? Update the playbook
+    │                 # in the same PR — see docs/concierge-admin.md
     ├── moderation/   # Report queue, user mgmt, verification (#435)
     ├── quality/      # Quality metrics (Phase 3)
     ├── pipeline/     # Crawl monitor (Phase 3)
