@@ -255,20 +255,23 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     }
   }
 
-  async function runSearch(query) {
+  async function runSearch(query, { context = '' } = {}) {
     if (!query.trim()) return;
     setBusy('searching');
     try {
       const type = focusedRow?.inferred_type || thingType;
       const results = normalizeSearchResults(await searchToAdd.mutateAsync({ query: query.trim(), type }));
       setSearchResults(results);
+      const sources = [...new Set(results.map(r => r.source).filter(Boolean))].join(', ');
       if (results.length === 0) {
-        setNote({ ok: false, text: `Nothing found for “${query.trim()}” — try different wording, or leave the row for the target to fix.` });
+        setNote({ ok: false, text: `${context}nothing found for “${query.trim()}” — try different wording, or leave the row for the target to fix.` });
       } else if (!results.some(r => r.in_registry)) {
         setNote({
           ok: true,
-          text: `Not in our registry yet, but found in ${[...new Set(results.map(r => r.source).filter(Boolean))].join(', ') || 'external sources'} — picking one adds it and attaches it.`,
+          text: `${context}found in ${sources || 'the source catalogues'} — picking one adds it and attaches it.`,
         });
+      } else if (context) {
+        setNote({ ok: true, text: `${context}found ${results.length} result(s) below.` });
       }
     } catch (err) {
       setNote({ ok: false, text: `Search failed — ${apiErrorMessage(err)}` });
@@ -346,11 +349,27 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       });
     } catch (err) {
       const status = err?.response?.status;
+      const ids = err?.response?.data?.canonical_ids;
+      const idText = ids && Object.keys(ids).length
+        ? Object.entries(ids).map(([k, v]) => `${k} ${v}`).join(', ')
+        : null;
+      if (status === 404) {
+        // We read the identifier and don't hold the thing — a coverage gap, not
+        // a bad link. Searching finds it in the source catalogues, where one
+        // click adds it, so run that search rather than describing it. The
+        // context rides along so the search's own note doesn't erase the fact
+        // that the link WAS understood.
+        setBusy(null);
+        await runSearch(searchTitle(focusedRow?.raw_text || ''), {
+          context: `Link read${idText ? ` (${idText})` : ''} but not in our registry — `,
+        });
+        return;
+      }
       setNote({
         ok: false,
         text:
-          status === 404 || status === 422
-            ? `That link doesn't match anything we hold — search by title instead, which goes through the source catalogues and produces a better entry than a crawl would.`
+          status === 422
+            ? `No identifier in that link — we can read IMDb, TMDB and Spotify links. Search by title instead.`
             : `Link lookup failed — ${apiErrorMessage(err)}`,
       });
     } finally {
