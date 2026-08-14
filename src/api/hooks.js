@@ -498,6 +498,24 @@ export function useSearchToAdd() {
   });
 }
 
+/**
+ * Materialise a Thing and get its id back, saying nothing about lists
+ * (listgem-platform#550) — the primitive a pitch draft needs, since it isn't a
+ * list and has no list_id to give the ordinary add paths.
+ *
+ *   { source_type, source_id, type }  a federated-search hit — synchronous
+ *   { url }                           identify only; 404/422 when we don't hold it
+ *
+ * URL mode deliberately does not create: a Thing minted from a pasted link's OG
+ * tags is a permanent low-quality registry entry, and searching routes through
+ * the source APIs instead and produces a better one.
+ */
+export function useResolveOrCreate() {
+  return useMutation({
+    mutationFn: (body) => client.post('/things/resolve-or-create', body).then(r => r.data),
+  });
+}
+
 // --- Verification (#435) ---
 export function useVerifiedUsers({ type = '', limit = 50, offset = 0 } = {}) {
   return useQuery({

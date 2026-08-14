@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import DataTable from '../../components/DataTable';
 import { Button, Field, TextArea, TextInput } from '../../components/Form';
-import { useImportParse, usePitchMutations, useResolveBatch, useSearchToAdd } from '../../api/hooks';
+import {
+  useImportParse,
+  usePitchMutations,
+  useResolveBatch,
+  useResolveOrCreate,
+  useSearchToAdd,
+} from '../../api/hooks';
 import { apiErrorMessage } from '../../api/errors';
 import {
   ROW_STATUS,
   applyBatchResults,
   batchResults,
   chunkForBatch,
+  normalizeCandidate,
   normalizeParsed,
   normalizeSearchResults,
   pendingIndices,
@@ -35,20 +42,20 @@ function Kbd({ children }) {
   );
 }
 
-function CandidateRow({ candidate, chosen, onPick }) {
-  // A federated hit with no thing_id exists in TMDB/Spotify/Books but not in our
-  // registry. Shown rather than hidden — knowing it exists is what tells the
-  // operator to leave the row rather than keep hunting — but not attachable
-  // until listgem-platform#550.
-  const unavailable = !candidate.thing_id;
+function CandidateRow({ candidate, chosen, onPick, busy }) {
+  // A federated hit with no thing_id isn't in our registry yet. Picking it now
+  // materialises it through the same kernel path a user add uses
+  // (listgem-platform#550) — same Thing either way, so the dashed border is a
+  // note about provenance, not a warning.
+  const needsCreate = !candidate.thing_id;
   return (
     <button
-      onClick={unavailable ? undefined : onPick}
-      disabled={unavailable}
-      title={unavailable ? `Found in ${candidate.source || 'an external source'}, not yet in our registry` : undefined}
-      className={`flex w-full items-baseline gap-2 rounded border px-2 py-1 text-left text-xs ${
-        unavailable
-          ? 'cursor-not-allowed border-dashed border-gray-200 text-gray-400'
+      onClick={onPick}
+      disabled={busy}
+      title={needsCreate ? `Not in the registry yet — adds it from ${candidate.source || 'the source'}, then attaches` : undefined}
+      className={`flex w-full items-baseline gap-2 rounded border px-2 py-1 text-left text-xs disabled:opacity-50 ${
+        needsCreate
+          ? 'border-dashed border-gray-300 hover:bg-gray-50'
           : chosen
             ? 'border-indigo-300 bg-indigo-50'
             : 'border-gray-200 hover:bg-gray-50'
@@ -61,7 +68,11 @@ function CandidateRow({ candidate, chosen, onPick }) {
       {candidate.score != null && (
         <span className="tabular-nums text-gray-400">{Number(candidate.score).toFixed(2)}</span>
       )}
-      {unavailable && <span className="shrink-0 text-[10px] uppercase tracking-wide">not in registry</span>}
+      {needsCreate && (
+        <span className="shrink-0 text-[10px] tracking-wide text-gray-400 uppercase">
+          + add from {candidate.source || 'source'}
+        </span>
+      )}
     </button>
   );
 }
@@ -82,10 +93,12 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
   const [dirty, setDirty] = useState(false);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState(null);
+  const [urlInput, setUrlInput] = useState('');
 
   const parse = useImportParse();
   const resolveBatch = useResolveBatch();
   const searchToAdd = useSearchToAdd();
+  const resolveOrCreate = useResolveOrCreate();
   const { saveItems } = usePitchMutations(pitchId);
 
   // Re-seed when the server's item set changes identity (detail query settles).
@@ -204,8 +217,8 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         setNote({ ok: false, text: `Nothing found for “${query.trim()}” — try different wording, or leave the row for the target to fix.` });
       } else if (!results.some(r => r.in_registry)) {
         setNote({
-          ok: false,
-          text: `Found in ${[...new Set(results.map(r => r.source).filter(Boolean))].join(', ') || 'external sources'} but not in our registry yet, so it can't be attached. Leave the row unresolved and the target gets it as editable text.`,
+          ok: true,
+          text: `Not in our registry yet, but found in ${[...new Set(results.map(r => r.source).filter(Boolean))].join(', ') || 'external sources'} — picking one adds it and attaches it.`,
         });
       }
     } catch (err) {
@@ -215,14 +228,76 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     }
   }
 
-  function pick(candidate) {
-    patchRow(focus, {
-      thing_id: candidate.thing_id,
-      match: candidate,
-      status: candidate.thing_id ? 'resolved' : 'ambiguous',
-    });
-    setSearchResults(null);
-    setSearch('');
+  /**
+   * Attach a candidate. A registry hit attaches directly; a federated hit is
+   * materialised first through the same kernel path a user add uses, so a Thing
+   * created from a pitch is indistinguishable from one created any other way.
+   */
+  async function pick(candidate) {
+    if (candidate.thing_id) {
+      patchRow(focus, { thing_id: candidate.thing_id, match: candidate, status: 'resolved' });
+      setSearchResults(null);
+      setSearch('');
+      return;
+    }
+    if (!candidate.source_id) {
+      setNote({ ok: false, text: 'That result carries no source id, so it cannot be added.' });
+      return;
+    }
+    setBusy('adding');
+    setNote(null);
+    try {
+      const data = await resolveOrCreate.mutateAsync({
+        source_type: candidate.source_type,
+        source: candidate.source,
+        source_id: candidate.source_id,
+        type: candidate.type || thingType,
+      });
+      const match = normalizeCandidate({ ...(data.thing || {}), thing_id: data.thing_id }) || candidate;
+      patchRow(focus, { thing_id: data.thing_id, match, status: 'resolved' });
+      setSearchResults(null);
+      setSearch('');
+      setNote({
+        ok: true,
+        text: data.created
+          ? `Added “${match.title}” to the registry and attached it.`
+          : `“${match.title}” was already in the registry — attached.`,
+      });
+    } catch (err) {
+      setNote({ ok: false, text: `Could not add that — ${apiErrorMessage(err)}` });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Identify a Thing from a pasted link. Deliberately identify-only: the API
+   * will not mint a Thing from a link's metadata, because one built from thin
+   * OG tags is a permanent low-quality registry entry, and searching routes
+   * through the source APIs and produces a better one. A miss says so.
+   */
+  async function resolveFromUrl(url) {
+    if (!url.trim()) return;
+    setBusy('adding');
+    setNote(null);
+    try {
+      const data = await resolveOrCreate.mutateAsync({ url: url.trim() });
+      const match = normalizeCandidate({ ...(data.thing || {}), thing_id: data.thing_id });
+      patchRow(focus, { thing_id: data.thing_id, match, status: 'resolved' });
+      setUrlInput('');
+      setNote({ ok: true, text: `Matched “${match?.title || data.thing_id}” from that link.` });
+    } catch (err) {
+      const status = err?.response?.status;
+      setNote({
+        ok: false,
+        text:
+          status === 404 || status === 422
+            ? `That link doesn't match anything we hold — search by title instead, which goes through the source catalogues and produces a better entry than a crawl would.`
+            : `Link lookup failed — ${apiErrorMessage(err)}`,
+      });
+    } finally {
+      setBusy(null);
+    }
   }
 
   function toggleDrop(index) {
@@ -467,6 +542,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                   key={c.thing_id || i}
                   candidate={c}
                   chosen={c.thing_id && c.thing_id === focusedRow.thing_id}
+                  busy={busy === 'adding'}
                   onPick={() => pick(c)}
                 />
               ))}
@@ -495,13 +571,36 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                 <div className="mt-2 space-y-1">
                   {searchResults.length === 0 && <div className="text-xs text-gray-400">No candidates.</div>}
                   {searchResults.map((c, i) => (
-                    <CandidateRow key={c.thing_id || i} candidate={c} chosen={false} onPick={() => pick(c)} />
+                    <CandidateRow
+                    key={c.thing_id || `${c.source}-${c.source_id}` || i}
+                    candidate={c}
+                    chosen={false}
+                    busy={busy === 'adding'}
+                    onPick={() => pick(c)}
+                  />
                   ))}
                 </div>
               )}
             </div>
             <div>
+              <form
+                className="flex gap-2"
+                onSubmit={e => {
+                  e.preventDefault();
+                  resolveFromUrl(urlInput);
+                }}
+              >
+                <TextInput
+                  value={urlInput}
+                  onChange={e => setUrlInput(e.target.value)}
+                  placeholder="…or paste a link (IMDb, TMDB, Spotify…)"
+                />
+                <Button type="submit" disabled={!!busy || !urlInput.trim()}>
+                  Match
+                </Button>
+              </form>
               <TextInput
+                className="mt-2"
                 value={focusedRow.note || ''}
                 onChange={e => patchRow(focus, { note: e.target.value })}
                 placeholder="Note for this row (internal)"
