@@ -222,6 +222,10 @@ export function hasErrors(errors: ErrorMap): boolean {
   return Object.keys(errors).length > 0;
 }
 
+// VITE_PUBLIC_SITE_URL is where the public surfaces are served *today*; the
+// listgem.com default is where they are going. Getting this wrong doesn't fail
+// loudly — the link loads a page that reports the preview as withdrawn, because
+// its API call is blocked by CORS for an origin the API doesn't allowlist.
 const PUBLIC_SITE = String(import.meta.env?.VITE_PUBLIC_SITE_URL || 'https://listgem.com').replace(/\/$/, '');
 
 /** The two links staff actually send. Public, no auth, rate-limited 30/min. */

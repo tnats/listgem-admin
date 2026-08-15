@@ -156,8 +156,19 @@ describe('intake validation', () => {
 
 describe('public links', () => {
   it('builds the two links staff actually send', () => {
-    expect(previewUrl('pv_1')).toBe('https://listgem.com/pitch/pv_1');
-    expect(inviteUrl('inv_1')).toBe('https://listgem.com/signup?invite=inv_1');
+    // Asserted by shape, not by host: the public surfaces live on a Netlify
+    // domain today and move to listgem.com later, and a test pinned to either
+    // one fails for the wrong reason when that changes.
+    expect(previewUrl('pv_1')).toMatch(/^https:\/\/[^/]+\/pitch\/pv_1$/);
+    expect(inviteUrl('inv_1')).toMatch(/^https:\/\/[^/]+\/signup\?invite=inv_1$/);
+  });
+
+  it('takes its base from VITE_PUBLIC_SITE_URL', () => {
+    // Getting this wrong is silent: the link loads a real page that reports the
+    // preview as withdrawn, because the API won't allowlist the wrong origin.
+    const base = import.meta.env.VITE_PUBLIC_SITE_URL || 'https://listgem.com';
+    expect(previewUrl('pv_1').startsWith(base)).toBe(true);
+    expect(inviteUrl('inv_1').startsWith(base)).toBe(true);
   });
 
   it('renders nothing without a token', () => {
