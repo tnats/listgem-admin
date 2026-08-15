@@ -140,8 +140,10 @@ describe('pitch detail — token issuing', () => {
     renderDetail();
     await screen.findByText('A rebuilt list');
     tab('Outreach');
-    expect(screen.getByText('https://listgem.com/pitch/pv_1')).toBeTruthy();
-    expect(screen.getByText('https://listgem.com/signup?invite=inv_1')).toBeTruthy();
+    // Host comes from VITE_PUBLIC_SITE_URL and changes when the public surfaces
+    // move domain; the paths are the contract.
+    expect(screen.getByText(/\/pitch\/pv_1$/)).toBeTruthy();
+    expect(screen.getByText(/\/signup\?invite=inv_1$/)).toBeTruthy();
   });
 });
 
