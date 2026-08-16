@@ -128,12 +128,32 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
   const crawlStatus = useCrawlStatus();
   const { saveItems } = usePitchMutations(pitchId);
 
-  // Re-seed when the server's item set changes identity (detail query settles).
+  /**
+   * Adopt the server's item set when it arrives — but never over the operator's
+   * work, and never straight after our own write.
+   *
+   * Saving invalidates the pitch query, and GET /pitches/:id reads from a
+   * replica. The refetch can therefore return the rows as they were BEFORE the
+   * write, and adopting those silently reverted the edit that had just been
+   * saved. Save again and the stale copy goes back to the server: a fix that
+   * undoes itself, which is exactly what a wrong match kept doing.
+   */
   const [seenItems, setSeenItems] = useState(items);
+  const skipNextSeed = useRef(false);
+  const [staleWarning, setStaleWarning] = useState(false);
   if (items !== seenItems) {
     setSeenItems(items);
-    setRows(rowsFromItems(items));
-    setDirty(false);
+    if (skipNextSeed.current) {
+      // Our own write echoing back, possibly from a lagging replica. We know
+      // what we sent; the screen already shows it.
+      skipNextSeed.current = false;
+    } else if (dirty) {
+      // Someone or something changed the stored set while this build was in
+      // progress. Local work wins, but say so rather than silently diverging.
+      setStaleWarning(true);
+    } else {
+      setRows(rowsFromItems(items));
+    }
   }
 
   const cancelled = useRef(false);
@@ -550,6 +570,10 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     try {
       const payload = toItemsPayload(rows);
       const data = await saveItems.mutateAsync({ items: payload });
+      // The invalidation this triggers may read a replica that hasn't caught
+      // up; don't let that overwrite what we just wrote.
+      skipNextSeed.current = true;
+      setStaleWarning(false);
       setDirty(false);
       setRows(rs => rs.filter(r => !r.dropped));
       setNote({ ok: true, text: `Saved ${data?.item_count ?? payload.length} item(s).` });
@@ -712,6 +736,13 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       {note && (
         <div className={`rounded p-2 text-xs ${note.ok ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-800'}`}>
           {note.text}
+        </div>
+      )}
+
+      {staleWarning && (
+        <div className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+          The stored item set changed while you were working. Your unsaved changes are still here and will
+          win when you save — reload first if you'd rather start from the stored copy.
         </div>
       )}
 
