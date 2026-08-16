@@ -373,9 +373,18 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       return;
     }
     if (candidate.thing_id) {
+      const replaced = focusedRow?.match?.title;
       patchRow(focus, { thing_id: candidate.thing_id, match: candidate, status: 'resolved' });
       setSearchResults(null);
       setSearch('');
+      // Say what was attached. Picking used to be silent, so a mis-click looked
+      // identical to a correct one until you re-read the table.
+      setNote({
+        ok: true,
+        text: `Row ${focus + 1} → “${candidate.title}”${candidate.year ? ` (${candidate.year})` : ''}${
+          replaced && replaced !== candidate.title ? `, replacing “${replaced}”` : ''
+        }.`,
+      });
       return;
     }
     if (!candidate.source_id) {
@@ -815,7 +824,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
               <div className="text-[11px] uppercase tracking-wider text-gray-400">Candidates</div>
               {focusedRow.candidates.map((c, i) => (
                 <CandidateRow
-                  key={c.thing_id || i}
+                  key={`${i}-${c.thing_id || c.title}`}
                   candidate={c}
                   chosen={c.thing_id && c.thing_id === focusedRow.thing_id}
                   busy={busy === 'adding'}
@@ -845,10 +854,13 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
               </form>
               {searchResults && (
                 <div className="mt-2 space-y-1">
+                  <div className="text-[11px] uppercase tracking-wider text-gray-400">
+                    Search results{searchResults.length ? ` (${searchResults.length})` : ''}
+                  </div>
                   {searchResults.length === 0 && <div className="text-xs text-gray-400">No candidates.</div>}
                   {searchResults.map((c, i) => (
                     <CandidateRow
-                    key={c.thing_id || `${c.source}-${c.source_id}` || i}
+                    key={`${i}-${c.thing_id || c.source_id || c.title}`}
                     candidate={c}
                     chosen={false}
                     busy={busy === 'adding'}
