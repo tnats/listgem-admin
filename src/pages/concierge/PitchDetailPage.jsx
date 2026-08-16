@@ -212,7 +212,7 @@ export default function PitchDetailPage() {
 
       {tab === 'outreach' && (
         <div className="space-y-4">
-          <TokensPanel pitch={pitch} events={events} />
+          <TokensPanel pitch={pitch} />
 
           <div className="rounded-lg border border-red-200 bg-white p-4">
             <h3 className="text-sm font-semibold text-gray-900">Takedown</h3>
