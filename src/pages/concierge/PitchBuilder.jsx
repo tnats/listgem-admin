@@ -350,11 +350,17 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
    * Bring in a Thing from a link whose identifier we recognised but don't hold.
    *
    * Offered only after a 404 that returned canonical ids — never for an
-   * arbitrary page. For an IMDb or TMDB link the crawler resolves through the
-   * source API (crawlExtraction's imdb.com/title branch), so this produces the
-   * same entry a search would, not a scrape of whatever the page happened to
-   * expose. Creation is asynchronous: the API queues a crawl and hands back an
-   * id to poll.
+   * arbitrary page.
+   *
+   * The reason isn't entry quality: a crawl runs the same enrichment pipeline a
+   * normal add does. It's that a page yields whatever the page said, while a
+   * source catalogue yields the canonical record — an Open Library crawl
+   * produced "Yüzüklerin Efendisi by J.R.R. Tolkien", the right book in Turkish,
+   * because that was the edition served. A recognised identifier doesn't have
+   * that problem: it resolves through the source API either way.
+   *
+   * Creation is asynchronous: the API queues a crawl and hands back an id to
+   * poll.
    */
   async function createFromLink({ url, row }) {
     setBusy('adding');
@@ -484,10 +490,10 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
   }
 
   /**
-   * Identify a Thing from a pasted link. Deliberately identify-only: the API
-   * will not mint a Thing from a link's metadata, because one built from thin
-   * OG tags is a permanent low-quality registry entry, and searching routes
-   * through the source APIs and produces a better one. A miss says so.
+   * Identify a Thing from a pasted link. Identify-only by default: a link tells
+   * us what page someone was looking at, not which canonical record they meant,
+   * and search resolves that better. A miss says so, and offers the crawl only
+   * when the link carried an identifier we recognise.
    */
   async function resolveFromUrl(url) {
     if (!url.trim()) return;

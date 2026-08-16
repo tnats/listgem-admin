@@ -509,9 +509,12 @@ export function useSearchToAdd() {
  *   { source_type, source_id, type }  a federated-search hit — synchronous
  *   { url }                           identify only; 404/422 when we don't hold it
  *
- * URL mode deliberately does not create: a Thing minted from a pasted link's OG
- * tags is a permanent low-quality registry entry, and searching routes through
- * the source APIs instead and produces a better one.
+ * URL mode does not create by default. Not because a crawl produces a thin
+ * entry — it runs the same enrichment pipeline a normal add does — but because
+ * a page gives whatever the page said, while a source catalogue gives the
+ * canonical record. Crawling an Open Library page produced "Yüzüklerin Efendisi
+ * by J.R.R. Tolkien": the right book, the Turkish edition, because that is what
+ * was served. Search first, link as the fallback.
  */
 export function useResolveOrCreate() {
   return useMutation({
