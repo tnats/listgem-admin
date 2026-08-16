@@ -54,7 +54,7 @@ function Kbd({ children }) {
   );
 }
 
-function CandidateRow({ candidate, chosen, onPick, busy }) {
+function CandidateRow({ candidate, chosen, onPick, busy, wrongType }) {
   // A federated hit with no thing_id isn't in our registry yet. Picking it now
   // materialises it through the same kernel path a user add uses
   // (listgem-platform#550) — same Thing either way, so the dashed border is a
@@ -63,10 +63,18 @@ function CandidateRow({ candidate, chosen, onPick, busy }) {
   return (
     <button
       onClick={onPick}
-      disabled={busy}
-      title={needsCreate ? `Not in the registry yet — adds it from ${candidate.source || 'the source'}, then attaches` : undefined}
+      disabled={busy || wrongType}
+      title={
+        wrongType
+          ? `${candidate.type} can't go on this list — a list holds one type`
+          : needsCreate
+            ? `Not in the registry yet — adds it from ${candidate.source || 'the source'}, then attaches`
+            : undefined
+      }
       className={`flex w-full items-baseline gap-2 rounded border px-2 py-1 text-left text-xs disabled:opacity-50 ${
-        needsCreate
+        wrongType
+          ? 'cursor-not-allowed border-gray-200 text-gray-400 line-through decoration-gray-300'
+          : needsCreate
           ? 'border-dashed border-gray-300 hover:bg-gray-50'
           : chosen
             ? 'border-indigo-300 bg-indigo-50'
@@ -176,8 +184,25 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       setBusy(label);
       setNote(null);
       let working = source || rowsRef.current;
+      /**
+       * A row must never hold a match of the wrong type. The matcher blocks on
+       * embeddings, so its nearest neighbour can be a different type entirely —
+       * that is how a Movie pitch ended up holding a TVSeries. Attaching it and
+       * flagging it later leaves a row that reads "Resolved" in green and
+       * "wrong type" in red at the same time, and blocks the save from a state
+       * the operator never chose. Drop the match, keep the candidates, and let
+       * the row say plainly that it is unresolved.
+       */
+      let rejected = 0;
+      const sanitise = next =>
+        next.map(row => {
+          if (!row.thing_id || typeMatchesPitch(row.match?.type, thingType)) return row;
+          rejected += 1;
+          return { ...row, thing_id: null, match: null, status: 'unresolved', reason: 'type_mismatch' };
+        });
       const commit = next => {
-        working = next;
+        working = sanitise(next);
+        next = working;
         setRows(current =>
           current.length === next.length
             ? next.map((row, i) => ({ ...row, note: current[i].note, dropped: current[i].dropped }))
@@ -190,6 +215,12 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
           commit(applyBatchResults(working, batchResults(data), chunk));
         }
         setDirty(true);
+        if (rejected > 0) {
+          setNote({
+            ok: false,
+            text: `${rejected} row(s) matched to something that isn't ${thingType} — left unresolved rather than attached, because a list can only hold one type. Search those rows.`,
+          });
+        }
 
         // Chase pending on the 60s deadline rather than calling them unresolved.
         for (const delay of RECHECK_DELAYS_MS) {
@@ -827,6 +858,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                   key={`${i}-${c.thing_id || c.title}`}
                   candidate={c}
                   chosen={c.thing_id && c.thing_id === focusedRow.thing_id}
+                  wrongType={!typeMatchesPitch(c.type, thingType)}
                   busy={busy === 'adding'}
                   onPick={() => pick(c)}
                 />
@@ -863,6 +895,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                     key={`${i}-${c.thing_id || c.source_id || c.title}`}
                     candidate={c}
                     chosen={false}
+                    wrongType={!typeMatchesPitch(c.type, thingType)}
                     busy={busy === 'adding'}
                     onPick={() => pick(c)}
                   />
