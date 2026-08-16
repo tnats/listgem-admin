@@ -493,3 +493,46 @@ describe('builder — a wrong-type match is never attached in the first place', 
     expect(screen.getByRole('button', { name: /save items/i }).disabled).toBe(false);
   });
 });
+
+describe('builder — the save guard is on the operation, not the button', () => {
+  const POISONED = [
+    {
+      raw_text: 'Persona (1966) 🇸🇪 8.6/10',
+      thing_id: 'tvseries_hignfy_1990',
+      resolution_status: 'resolved',
+      position: 0,
+      thing_type_actual: 'TVSeries',
+      thing_metadata: { title: 'Have I Got News for You', year: 1990 },
+    },
+  ];
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.post.mockReset();
+    client.put.mockReset();
+    client.get.mockRejectedValue(new Error('no search'));
+    client.put.mockResolvedValue({ data: { success: true, item_count: 1 } });
+  });
+
+  it('refuses the `s` shortcut too, which is how the mismatch got saved', () => {
+    // The button was disabled and the keypath called save() directly. The API
+    // validates nothing on PUT items, so the UI check is the only one there is
+    // — which makes "guard the button" not a guard at all.
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={POISONED} />);
+    expect(screen.getByRole('button', { name: /save items/i }).disabled).toBe(true);
+
+    fireEvent.keyDown(window, { key: 's' });
+
+    expect(client.put).not.toHaveBeenCalled();
+    expect(screen.getByText(/Not saved — row 1 is not Movie/i)).toBeTruthy();
+  });
+
+  it('still saves by shortcut when nothing is mismatched', async () => {
+    const clean = [{ ...POISONED[0], thing_id: 'movie_persona_1966_aa', thing_type_actual: 'Movie', thing_metadata: { title: 'Persona', year: 1966 } }];
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={clean} />);
+
+    fireEvent.keyDown(window, { key: 's' });
+
+    await vi.waitFor(() => expect(client.put).toHaveBeenCalledWith('/pitches/p_1/items', expect.anything()));
+  });
+});
