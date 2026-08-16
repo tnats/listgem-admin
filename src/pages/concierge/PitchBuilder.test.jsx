@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import { renderWithProviders } from '../../test/utils';
@@ -534,5 +535,55 @@ describe('builder — the save guard is on the operation, not the button', () =>
     fireEvent.keyDown(window, { key: 's' });
 
     await vi.waitFor(() => expect(client.put).toHaveBeenCalledWith('/pitches/p_1/items', expect.anything()));
+  });
+});
+
+describe('builder — a lagging refetch must not undo the operator', () => {
+  // Saving invalidates the pitch query, and GET /pitches/:id reads a replica.
+  // The refetch can return the rows as they were BEFORE the write; adopting
+  // those reverted the edit that had just been saved, and saving again wrote
+  // the stale copy back. A fix that undoes itself.
+  const STALE = [{
+    raw_text: 'Persona (1966)',
+    thing_id: 'tvseries_hignfy_1990',
+    resolution_status: 'resolved',
+    position: 0,
+    thing_type_actual: 'TVSeries',
+    thing_metadata: { title: 'Have I Got News for You', year: 1990 },
+  }];
+
+  function Harness() {
+    // Mirrors PitchDetailPage: `items` changes identity when the query refetches.
+    const [items, setItems] = useState(STALE);
+    return (
+      <>
+        <button onClick={() => setItems([...STALE])}>refetch stale</button>
+        <PitchBuilder pitchId="p_1" thingType="Movie" items={items} />
+      </>
+    );
+  }
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.put.mockReset();
+    client.get.mockResolvedValue({
+      data: { results: [{ thing_id: 'movie_persona_1966_aa', title: 'Persona', type: 'Movie', year: 1966, source: 'local', in_registry: true }] },
+    });
+    client.put.mockResolvedValue({ data: { success: true, item_count: 1 } });
+  });
+
+  it('keeps the picked match when the server echoes the old rows back', async () => {
+    renderWithProviders(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
+    fireEvent.click(await screen.findByText('Persona'));
+    await screen.findByText(/Row 1 → “Persona”/);
+
+    // The replica hands back the pre-write rows.
+    fireEvent.click(screen.getByRole('button', { name: /refetch stale/i }));
+
+    // The edit survives, and the wrong-type block does not return.
+    expect(screen.queryByText('wrong type')).toBeNull();
+    expect(screen.getByRole('button', { name: /save items/i }).disabled).toBe(false);
+    expect(screen.getByText(/stored item set changed while you were working/i)).toBeTruthy();
   });
 });
