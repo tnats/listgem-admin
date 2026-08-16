@@ -493,7 +493,10 @@ export function useThingTypes() {
  */
 export function useSearchToAdd() {
   return useMutation({
-    mutationFn: ({ query, type, limit = 10 }) =>
+    // 25, not 10: the API sorts registry hits first, so a common word fills
+    // every slot with local partial matches and the external result you were
+    // actually looking for never appears.
+    mutationFn: ({ query, type, limit = 25 }) =>
       client.get('/search-to-add', { params: { query, type: type || undefined, limit } }).then(r => r.data),
   });
 }
@@ -513,6 +516,16 @@ export function useSearchToAdd() {
 export function useResolveOrCreate() {
   return useMutation({
     mutationFn: (body) => client.post('/things/resolve-or-create', body).then(r => r.data),
+  });
+}
+
+/**
+ * Poll a crawl started by resolve-or-create's { create: true } path. Returns
+ * `thingId` once `status` is `completed`.
+ */
+export function useCrawlStatus() {
+  return useMutation({
+    mutationFn: (crawlId) => client.get(`/ingestion/crawl-status/${crawlId}`).then(r => r.data),
   });
 }
 

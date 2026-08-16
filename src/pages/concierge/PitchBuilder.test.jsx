@@ -230,8 +230,10 @@ describe('builder — unresolved rows search themselves', () => {
 
     await vi.advanceTimersByTimeAsync(700);
     await vi.waitFor(() =>
+      // 25, not 10: registry hits sort first, so a common word fills every slot
+      // with local partial matches and the external result never appears.
       expect(client.get).toHaveBeenCalledWith('/search-to-add', {
-        params: { query: 'Persona', type: 'Movie', limit: 10 },
+        params: { query: 'Persona', type: 'Movie', limit: 25 },
       }),
     );
     vi.useRealTimers();
@@ -309,5 +311,66 @@ describe('builder — an item of the wrong type cannot be saved', () => {
 
     expect(screen.queryByText('wrong type')).toBeNull();
     expect(screen.getByRole('button', { name: /save items/i }).disabled).toBe(false);
+  });
+});
+
+describe('builder — a link we recognise but do not hold', () => {
+  beforeEach(() => {
+    client.get.mockReset();
+    client.post.mockReset();
+    client.get.mockResolvedValue({ data: { results: [] } });
+  });
+
+  it('offers to fetch it, polls the crawl, and attaches the result', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // First call: identify-only, 404 with the id we read. Second: create.
+    client.post
+      .mockRejectedValueOnce({ response: { status: 404, data: { canonical_ids: { imdb_id: 'tt0060827' } } } })
+      .mockResolvedValueOnce({ data: { status: 'queued', crawl_id: 'crawl_1' } })
+      .mockResolvedValueOnce({
+        data: { thing_id: 'movie_persona_1966_zz', created: true, thing: { title: 'Persona', type: 'Movie', year: 1966 } },
+      });
+    client.get.mockImplementation(url =>
+      url === '/ingestion/crawl-status/crawl_1'
+        ? Promise.resolve({ data: { status: 'completed', thingId: 'movie_persona_1966_zz' } })
+        : Promise.resolve({ data: { results: [] } }),
+    );
+
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={ITEMS} />);
+    fireEvent.change(screen.getByPlaceholderText(/Match row 1 using a link/i), {
+      target: { value: 'https://www.imdb.com/title/tt0060827/' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^match$/i }));
+
+    // The offer names what was read, so it reads as a recognised link rather
+    // than a guess at an arbitrary page.
+    const offer = await screen.findByRole('button', { name: /add it from this link/i });
+    // The id appears twice — in the note and in the offer. The offer's copy is
+    // what says the link was recognised rather than guessed at.
+    expect(screen.getByText(/We read imdb_id tt0060827 from that link/i)).toBeTruthy();
+
+    fireEvent.click(offer);
+    await vi.advanceTimersByTimeAsync(3500);
+
+    expect(await screen.findByText(/Added .*Persona.* and attached it to row 1/i)).toBeTruthy();
+    expect(client.post).toHaveBeenCalledWith('/things/resolve-or-create', {
+      url: 'https://www.imdb.com/title/tt0060827/',
+      create: true,
+    });
+    vi.useRealTimers();
+  });
+
+  it('does not offer a crawl for a link carrying no identifier', async () => {
+    client.post.mockRejectedValue({ response: { status: 422, data: { error: 'No canonical id in that URL' } } });
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={ITEMS} />);
+    fireEvent.change(screen.getByPlaceholderText(/Match row 1 using a link/i), {
+      target: { value: 'https://example.com/a-blog-post' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^match$/i }));
+
+    expect(await screen.findByText(/No identifier in that link/i)).toBeTruthy();
+    // Crawling an arbitrary page mints an entry from whatever it happened to
+    // expose; that stays unavailable.
+    expect(screen.queryByRole('button', { name: /add it from this link/i })).toBeNull();
   });
 });
