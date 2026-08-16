@@ -59,8 +59,6 @@ export interface BuilderRow {
   match: Candidate | null;
   note: string;
   dropped: boolean;
-  /** From /imports/parse; falls back to the pitch's thing_type when null. */
-  inferred_type: string | null;
   confidence: number | null;
   reason: string | null;
 }
@@ -325,8 +323,14 @@ export function extractYear(rawText: string): number | null {
 
 /**
  * `candidates` for POST /resolve/batch. `type` is required per candidate, and
- * the builder has no per-row type of its own — it uses the parser's
- * `inferred_type` when there is one and the pitch's `thing_type` otherwise.
+ * it is ALWAYS the pitch's own type.
+ *
+ * Never a type derived from a row's current match. A list holds exactly one
+ * type, so there is no legitimate row-level variation — and a row that matched
+ * the wrong thing carries that thing's type, which would then constrain the
+ * search meant to correct it. That happened: a Movie pitch whose row had
+ * mismatched to a TVSeries searched TMDB's TV index and returned twenty
+ * TV results, none of them the film.
  */
 export function toBatchPayload(
   rows: BuilderRow[],
@@ -337,7 +341,7 @@ export function toBatchPayload(
     const raw = rows[rowIndex].raw_text;
     const year = extractYear(raw);
     return {
-      type: rows[rowIndex].inferred_type || fallbackType,
+      type: fallbackType,
       title: searchTitle(raw),
       ...(year ? { year } : {}),
     };
@@ -423,7 +427,6 @@ export function rowsFromParsed(parsed: ParsedCandidate[]): BuilderRow[] {
     match: null,
     note: '',
     dropped: false,
-    inferred_type: p.inferred_type ?? null,
     confidence: null,
     reason: null,
   }));
@@ -470,7 +473,6 @@ export function rowsFromItems(items: unknown): BuilderRow[] {
         match: match?.thing_id || match?.title !== '(untitled)' ? match : null,
         note: typeof it.note === 'string' ? it.note : '',
         dropped: false,
-        inferred_type: firstString(it.thing_type_actual),
         confidence: null,
         reason: null,
       };

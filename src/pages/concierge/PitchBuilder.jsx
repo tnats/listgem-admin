@@ -266,7 +266,6 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         match,
         note: '',
         dropped: false,
-        inferred_type: match?.type || null,
         confidence: null,
         reason: null,
       };
@@ -337,7 +336,9 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     if (!query.trim()) return;
     setBusy('searching');
     try {
-      const type = focusedRow?.inferred_type || thingType;
+      // The pitch's type, always — see toBatchPayload. A row's current match
+      // must never constrain the search intended to replace it.
+      const type = thingType;
       const results = normalizeSearchResults(await searchToAdd.mutateAsync({ query: query.trim(), type }));
       setSearchResults(results);
       const sources = [...new Set(results.map(r => r.source).filter(Boolean))].join(', ');
@@ -905,7 +906,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                 placeholder="Note for this row (internal)"
               />
               <div className="mt-2 text-[11px] text-gray-400">
-                Resolving as <span className="font-medium text-gray-500">{focusedRow.inferred_type || thingType}</span>
+                Resolving as <span className="font-medium text-gray-500">{thingType}</span>
                 {focusedRow.reason && <> · server said <span className="text-gray-500">{focusedRow.reason}</span></>}
                 {focusedRow.confidence != null && (
                   <>

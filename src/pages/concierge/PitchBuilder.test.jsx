@@ -374,3 +374,37 @@ describe('builder — a link we recognise but do not hold', () => {
     expect(screen.queryByRole('button', { name: /add it from this link/i })).toBeNull();
   });
 });
+
+describe('builder — a wrong match must not steer the search that fixes it', () => {
+  // Reported: searching Persona on a Movie pitch returned twenty TVSeries
+  // (Persona 4 the Animation, Persona 5 the Animation…). The row had mismatched
+  // to a TVSeries, the row's type won over the pitch's, and the search queried
+  // TMDB's TV index — so the film could not appear at all.
+  const MISMATCHED = [
+    {
+      raw_text: 'Persona (1966) 🇸🇪 8.6/10',
+      thing_id: 'tvseries_have_i_got_news_for_you_1990_cf27f995',
+      resolution_status: 'resolved',
+      position: 0,
+      thing_type_actual: 'TVSeries',
+      thing_metadata: { title: 'Have I Got News for You', year: 1990 },
+    },
+  ];
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.post.mockReset();
+    client.get.mockResolvedValue({ data: { results: [] } });
+  });
+
+  it('searches as the pitch type, not as the wrong match', async () => {
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={MISMATCHED} />);
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
+
+    await vi.waitFor(() =>
+      expect(client.get).toHaveBeenCalledWith('/search-to-add', {
+        params: { query: 'Persona', type: 'Movie', limit: 25 },
+      }),
+    );
+  });
+});
