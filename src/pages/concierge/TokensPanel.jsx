@@ -44,16 +44,30 @@ function fmt(iso) {
  * link can claim the draft, which is why identity is confirmed after the claim
  * and never here.
  */
-export default function TokensPanel({ pitch }) {
+export default function TokensPanel({ pitch, events }) {
   const { issueTokens } = usePitchMutations(pitch.pitch_id);
   const [note, setNote] = useState(null);
   const [issued, setIssued] = useState(null);
+  const [confirmReissue, setConfirmReissue] = useState(false);
 
   const blocked = tokenIssueBlockedReason(pitch);
   const invite = issued?.invite_token || pitch.invite_token;
   const preview = issued?.preview_token || pitch.preview_token;
   const expiresAt = issued?.invite_expires_at || pitch.invite_expires_at;
   const expired = isExpired(expiresAt);
+
+  /**
+   * An expired invite on a pitch still in play may be deliberate: expiring it
+   * is how a pitch gets paused, and the reason lives in the audit trail rather
+   than in any field we could read. Re-issuing replaces both tokens and undoes
+   * that hold silently, so the expiry earns a second step and the last audit
+   * line is shown here rather than a tab away.
+   */
+  const inPlay = pitch.status === 'pitched' || pitch.status === 'accepted';
+  const mayBeHeld = expired && inPlay && !pitch.invite_used_at;
+  const lastEvent = Array.isArray(events) && events.length
+    ? [...events].sort((a, b) => new Date(b.created_at || b.at || 0) - new Date(a.created_at || a.at || 0))[0]
+    : null;
 
   async function issue() {
     setNote(null);
@@ -78,17 +92,41 @@ export default function TokensPanel({ pitch }) {
         <div className="mb-3 flex items-center gap-3">
           <h3 className="text-sm font-semibold text-gray-900">Preview + invite links</h3>
           <Button
-            variant="primary"
+            variant={mayBeHeld && !confirmReissue ? 'secondary' : 'primary'}
             size="sm"
             className="ml-auto"
             disabled={!canIssueTokens(pitch) || issueTokens.isPending}
-            onClick={issue}
+            onClick={() => (mayBeHeld && !confirmReissue ? setConfirmReissue(true) : issue())}
           >
-            {issueTokens.isPending ? 'Issuing…' : invite ? 'Re-issue tokens' : 'Generate tokens'}
+            {issueTokens.isPending
+              ? 'Issuing…'
+              : mayBeHeld && !confirmReissue
+                ? 'Re-issue tokens…'
+                : invite
+                  ? 'Re-issue tokens'
+                  : 'Generate tokens'}
           </Button>
         </div>
 
         {blocked && <div className="mb-3 rounded bg-gray-50 p-2 text-xs text-gray-600">{blocked}</div>}
+
+        {mayBeHeld && (
+          <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+            <span className="font-medium">This invite has expired while the pitch is still {pitch.status}.</span>{' '}
+            That can be deliberate — expiring the invite is how a pitch gets held. Re-issuing replaces both
+            tokens and lifts the hold.
+            {lastEvent && (
+              <div className="mt-1 text-amber-700">
+                Last audit entry: <span className="font-medium">{lastEvent.event_type || lastEvent.type}</span>
+                {lastEvent.detail ? ` — ${lastEvent.detail}` : ''}
+                {lastEvent.actor ? ` (${lastEvent.actor})` : ''}
+              </div>
+            )}
+            {confirmReissue && (
+              <div className="mt-1.5 font-medium">Press again to re-issue and lift the hold.</div>
+            )}
+          </div>
+        )}
 
         <div className="space-y-2">
           <CopyRow label="Preview" url={previewUrl(preview)} hint="Read-only page for the target. Public, no auth." />

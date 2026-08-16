@@ -161,3 +161,71 @@ describe('pitch detail — status transitions', () => {
     expect(offered).toEqual(['Archived']);
   });
 });
+
+describe('pitch detail — an expired invite may be a deliberate hold', () => {
+  beforeEach(() => {
+    client.get.mockReset();
+    client.post.mockReset();
+  });
+
+  // Expiring an invite is how a pitch gets paused, and the reason lives in the
+  // audit trail rather than in any field the portal can read. Re-issuing
+  // replaces both tokens and lifts the hold silently.
+  const HELD = {
+    ...BASE,
+    status: 'pitched',
+    invite_token: 'inv_1',
+    preview_token: 'pv_1',
+    invite_expires_at: '2026-08-01T00:00:00Z',
+    invite_used_at: null,
+  };
+
+  function serveHeld() {
+    client.get.mockImplementation(url =>
+      url === '/pitches/p_1'
+        ? Promise.resolve({
+            data: {
+              pitch: HELD,
+              items: [],
+              events: [
+                { event_type: 'tokens_issued', detail: 'invite + preview issued', actor: 'gtm@listgem.com', created_at: '2026-07-20T10:00:00Z' },
+                { event_type: 'status_changed', detail: 'invite expired to hold the pitch pending legal review', actor: 'gtm@listgem.com', created_at: '2026-08-01T09:00:00Z' },
+              ],
+            },
+          })
+        : Promise.reject(new Error('not mocked')),
+    );
+  }
+
+  it('warns, shows the last audit line, and takes two presses to re-issue', async () => {
+    serveHeld();
+    renderDetail();
+    await screen.findByText('A rebuilt list');
+    tab('Outreach');
+
+    expect(screen.getByText(/expired while the pitch is still pitched/i)).toBeTruthy();
+    // The reason is a tab away otherwise, and that's the tab nobody opens.
+    expect(screen.getByText(/hold the pitch pending legal review/i)).toBeTruthy();
+
+    const button = screen.getByRole('button', { name: /re-issue tokens…/i });
+    fireEvent.click(button);
+    expect(client.post).not.toHaveBeenCalled();
+    expect(screen.getByText(/Press again to re-issue and lift the hold/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /^re-issue tokens$/i }));
+    await vi.waitFor(() => expect(client.post).toHaveBeenCalledWith('/pitches/p_1/tokens'));
+  });
+
+  it('does not nag when the invite expired on a pitch nobody is chasing', async () => {
+    client.get.mockImplementation(url =>
+      url === '/pitches/p_1'
+        ? Promise.resolve({ data: { pitch: { ...HELD, status: 'declined' }, items: [], events: [] } })
+        : Promise.reject(new Error('not mocked')),
+    );
+    renderDetail();
+    await screen.findByText('A rebuilt list');
+    tab('Outreach');
+
+    expect(screen.queryByText(/expired while the pitch is still/i)).toBeNull();
+  });
+});
