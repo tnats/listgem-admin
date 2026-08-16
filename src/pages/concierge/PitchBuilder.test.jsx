@@ -408,3 +408,45 @@ describe('builder — a wrong match must not steer the search that fixes it', ()
     );
   });
 });
+
+describe('builder — picking says what it attached', () => {
+  // A registry pick used to be silent: click, and nothing told you which of
+  // twenty near-identical results landed. A mis-click looked exactly like a
+  // correct one until you re-read the table.
+  const RESULTS = {
+    results: [
+      { thing_id: 'movie_persona3_4_2016_zz', title: 'Persona3 the Movie #4 Winter of Rebirth', type: 'Movie', year: 2016, source: 'local', in_registry: true },
+      { thing_id: 'movie_persona_1966_aa', title: 'Persona', type: 'Movie', year: 1966, source: 'local', in_registry: true },
+    ],
+  };
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.post.mockReset();
+    client.get.mockResolvedValue({ data: RESULTS });
+  });
+
+  it('names the title and year it attached, and what it replaced', async () => {
+    const wrong = [
+      {
+        raw_text: 'Persona (1966) 🇸🇪 8.6/10',
+        thing_id: 'movie_persona3_4_2016_zz',
+        resolution_status: 'resolved',
+        position: 0,
+        thing_type_actual: 'Movie',
+        thing_metadata: { title: 'Persona3 the Movie #4 Winter of Rebirth', year: 2016 },
+      },
+    ];
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={wrong} />);
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
+
+    // The results list is labelled, so it can't be confused with the
+    // Candidates list stacked above it.
+    await screen.findByText(/Search results \(2\)/i);
+    fireEvent.click(await screen.findByText('Persona'));
+
+    expect(
+      await screen.findByText(/Row 1 → “Persona” \(1966\), replacing “Persona3 the Movie #4 Winter of Rebirth”/i),
+    ).toBeTruthy();
+  });
+});
