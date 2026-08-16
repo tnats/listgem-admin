@@ -244,6 +244,26 @@ export function isExpired(expiresAt?: string | null, now: number = Date.now()): 
 }
 
 /**
+ * Does an item's type belong on a pitch of this type?
+ *
+ * Every item on a list must match the list's `thing_type`, enforced by the
+ * `validate_thing_type_match` trigger with a RAISE EXCEPTION. That trigger sits
+ * on `list_items`, NOT on `pitch_list_items` — so a mismatched item saves into a
+ * pitch without complaint and detonates at provisioning, which is the moment the
+ * target clicks the invite. The failure lands on them, not on us.
+ *
+ * TVShow/TVSeries are interchangeable, matching the trigger's own exception.
+ */
+export function typeMatchesPitch(itemType?: string | null, pitchType?: string | null): boolean {
+  if (!itemType || !pitchType) return true; // nothing to contradict
+  const a = itemType.trim();
+  const b = pitchType.trim();
+  if (a === b) return true;
+  const tv = new Set(['TVSeries', 'TVShow']);
+  return tv.has(a) && tv.has(b);
+}
+
+/**
  * Offline fallback for the intake select. The live vocabulary is `GET /types`
  * (96 entries, public, no auth) — see `useThingTypes`. This list only appears
  * when that endpoint is unreachable, which is also when POST /pitches is

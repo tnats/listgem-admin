@@ -270,3 +270,44 @@ describe('builder — unresolved rows search themselves', () => {
     vi.useRealTimers();
   });
 });
+
+describe('builder — an item of the wrong type cannot be saved', () => {
+  // A Movie pitch holding a TVSeries saves fine and then fails at provisioning,
+  // because validate_thing_type_match lives on list_items, not pitch_list_items.
+  // The error surfaces when the target clicks the invite — on them, not us.
+  const POISONED = [
+    {
+      raw_text: 'Persona (1966) 🇸🇪 8.6/10',
+      thing_id: 'tvseries_have_i_got_news_for_you_1990_cf27f995',
+      resolution_status: 'resolved',
+      position: 0,
+      thing_type_actual: 'TVSeries',
+      thing_metadata: { title: 'Have I Got News for You', year: 1990 },
+    },
+  ];
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.post.mockReset();
+    client.put.mockReset();
+    client.get.mockRejectedValue(new Error('no search'));
+  });
+
+  it('flags the row, explains the consequence, and blocks the save', () => {
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={POISONED} />);
+
+    expect(screen.getByText('wrong type')).toBeTruthy();
+    expect(screen.getByText(/Row 1 is not Movie/i)).toBeTruthy();
+    expect(screen.getByText(/rejects a mismatch when the target claims/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /save items/i }).disabled).toBe(true);
+    expect(client.put).not.toHaveBeenCalled();
+  });
+
+  it('saves normally when the types agree', () => {
+    const clean = [{ ...POISONED[0], thing_id: 'movie_persona_1966_aa', thing_type_actual: 'Movie' }];
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={clean} />);
+
+    expect(screen.queryByText('wrong type')).toBeNull();
+    expect(screen.getByRole('button', { name: /save items/i }).disabled).toBe(false);
+  });
+});

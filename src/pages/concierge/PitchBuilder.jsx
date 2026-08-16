@@ -9,6 +9,7 @@ import {
   useSearchToAdd,
 } from '../../api/hooks';
 import { apiErrorMessage } from '../../api/errors';
+import { typeMatchesPitch } from './pitchRules';
 import {
   ROW_STATUS,
   applyBatchResults,
@@ -128,6 +129,12 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
   rowsRef.current = rows;
 
   const counts = summarize(rows);
+  // Items whose type can never live on this pitch. The API accepts them; the
+  // trigger on list_items rejects them at provisioning, i.e. when the target
+  // clicks the invite. Catch them here, where it costs nothing.
+  const mismatched = rows
+    .map((row, i) => ({ row, i }))
+    .filter(({ row }) => !row.dropped && row.thing_id && !typeMatchesPitch(row.match?.type, thingType));
   const focusedRow = rows[focus];
   const prefill = focusedRow ? searchTitle(focusedRow.raw_text) : '';
 
@@ -305,6 +312,13 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
    * created from a pitch is indistinguishable from one created any other way.
    */
   async function pick(candidate) {
+    if (!typeMatchesPitch(candidate.type, thingType)) {
+      setNote({
+        ok: false,
+        text: `“${candidate.title}” is ${candidate.type || 'an unknown type'}, and this is a ${thingType} pitch. A list can only hold one type, and the mismatch fails when the target claims the draft.`,
+      });
+      return;
+    }
     if (candidate.thing_id) {
       patchRow(focus, { thing_id: candidate.thing_id, match: candidate, status: 'resolved' });
       setSearchResults(null);
@@ -510,6 +524,14 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
           <StatusPill status={row.status} />
           {/* A match at 0.4 and one at 1.0 both read as "Resolved" otherwise —
               and a confident-looking wrong match is the expensive kind. */}
+          {row.thing_id && !typeMatchesPitch(row.match?.type, thingType) && (
+            <span
+              className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-700"
+              title={`This pitch is ${thingType}; the match is ${row.match?.type}. The target's claim would fail.`}
+            >
+              wrong type
+            </span>
+          )}
           {row.confidence != null && row.status === 'resolved' && (
             <span
               className={`text-[11px] tabular-nums ${
@@ -564,6 +586,17 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         </div>
       )}
 
+      {mismatched.length > 0 && (
+        <div className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-800">
+          <span className="font-medium">
+            Row {mismatched.map(m => m.i + 1).join(', ')} {mismatched.length === 1 ? 'is' : 'are'} not {thingType}.
+          </span>{' '}
+          Every item on a list must match the list's type — the database rejects a mismatch when the target
+          claims the draft, so this would fail on them rather than on us. Re-match or drop{' '}
+          {mismatched.length === 1 ? 'it' : 'them'} before saving.
+        </div>
+      )}
+
       {/* Summary */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
         <span className="tabular-nums">
@@ -574,6 +607,9 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         <span className="tabular-nums text-gray-500">{counts.unresolved} unresolved</span>
         {counts.pending > 0 && <span className="tabular-nums text-blue-600">{counts.pending} pending</span>}
         {counts.dropped > 0 && <span className="tabular-nums text-gray-400">{counts.dropped} dropped</span>}
+        {mismatched.length > 0 && (
+          <span className="font-medium text-red-600 tabular-nums">{mismatched.length} wrong type</span>
+        )}
         <div className="ml-auto flex items-center gap-1.5 text-[11px] text-gray-400">
           <span>
             j/k row<Kbd>↑↓</Kbd>
@@ -625,7 +661,16 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
           </Button>
           <div className="ml-auto flex items-center gap-2">
             {dirty && <span className="text-xs text-amber-600">unsaved changes</span>}
-            <Button variant="primary" onClick={save} disabled={!!busy || rows.length === 0}>
+            <Button
+              variant="primary"
+              onClick={save}
+              disabled={!!busy || rows.length === 0 || mismatched.length > 0}
+              title={
+                mismatched.length > 0
+                  ? `Row ${mismatched.map(m => m.i + 1).join(', ')} ${mismatched.length === 1 ? 'is' : 'are'} the wrong type for a ${thingType} pitch`
+                  : undefined
+              }
+            >
               {busy === 'saving' ? 'Saving…' : 'Save items'}
               <Kbd>s</Kbd>
             </Button>
