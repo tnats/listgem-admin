@@ -289,6 +289,13 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     try {
       const data = await resolveOrCreate.mutateAsync({ url: url.trim() });
       const match = normalizeCandidate({ ...(data.thing || {}), thing_id: data.thing_id });
+      if (!typeMatchesPitch(match?.type, thingType)) {
+        setNote({
+          ok: false,
+          text: `That link is ${match?.type || 'another type'}, and this is a ${thingType} pitch. Nothing added.`,
+        });
+        return;
+      }
       const row = {
         raw_text: match?.title || url.trim(),
         thing_id: data.thing_id,
@@ -344,6 +351,14 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         if (status.status === 'completed' && status.thingId) {
           const res = await resolveOrCreate.mutateAsync({ url });
           const match = normalizeCandidate({ ...(res.thing || {}), thing_id: res.thing_id || status.thingId });
+          if (!typeMatchesPitch(match?.type, thingType)) {
+            setNote({
+              ok: false,
+              text: `That link turned out to be ${match?.type || 'another type'} — added to the registry, but not attached to a ${thingType} pitch.`,
+            });
+            setCreatable(null);
+            return;
+          }
           patchRow(row, { thing_id: res.thing_id || status.thingId, match, status: 'resolved' });
           setCreatable(null);
           setUrlInput('');
@@ -461,6 +476,13 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     try {
       const data = await resolveOrCreate.mutateAsync({ url: url.trim() });
       const match = normalizeCandidate({ ...(data.thing || {}), thing_id: data.thing_id });
+      if (!typeMatchesPitch(match?.type, thingType)) {
+        setNote({
+          ok: false,
+          text: `That link is ${match?.type || 'another type'}, and this is a ${thingType} pitch. Not attached.`,
+        });
+        return;
+      }
       const replaced = focusedRow?.match?.title;
       patchRow(focus, { thing_id: data.thing_id, match, status: 'resolved' });
       setUrlInput('');
@@ -510,6 +532,19 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
   }
 
   async function save() {
+    // Guard the operation, not the button. Save is reachable from the `s`
+    // shortcut too, which is how a TVSeries reached a Movie pitch after the
+    // disabled button had already refused it: the keypath never asked.
+    // The API validates nothing here, so this is the only check there is.
+    if (mismatched.length > 0) {
+      setNote({
+        ok: false,
+        text: `Not saved — row ${mismatched.map(m => m.i + 1).join(', ')} ${
+          mismatched.length === 1 ? 'is' : 'are'
+        } not ${thingType}. The target's claim would fail on it.`,
+      });
+      return;
+    }
     setBusy('saving');
     setNote(null);
     try {
