@@ -450,3 +450,46 @@ describe('builder — picking says what it attached', () => {
     ).toBeTruthy();
   });
 });
+
+describe('builder — a wrong-type match is never attached in the first place', () => {
+  beforeEach(() => {
+    client.get.mockReset();
+    client.post.mockReset();
+    client.get.mockRejectedValue(new Error('no search'));
+  });
+
+  it('leaves the row unresolved when the matcher returns another type', async () => {
+    // The matcher blocks on embeddings, so its nearest neighbour can be a
+    // different type entirely — that's how a Movie pitch came to hold a
+    // TVSeries. Attaching it and flagging it later produces a row that reads
+    // Resolved in green and "wrong type" in red at once, and blocks the save
+    // from a state the operator never chose.
+    client.post.mockImplementation(url =>
+      url === '/imports/parse'
+        ? Promise.resolve({ data: { candidates: [{ position: 0, raw_text: 'Persona (1966)', inferred_type: null }] } })
+        : Promise.resolve({
+            data: {
+              results: [
+                {
+                  index: 0,
+                  status: 'found_existing',
+                  confidence: 0.62,
+                  match: { thing_id: 'tvseries_hignfy_1990', title: 'Have I Got News for You', type: 'TVSeries', year: 1990 },
+                  suggestions: [],
+                },
+              ],
+            },
+          }),
+    );
+
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={[]} />);
+    fireEvent.change(document.querySelector('textarea'), { target: { value: 'Persona (1966)' } });
+    fireEvent.click(screen.getByRole('button', { name: /parse & resolve/i }));
+
+    expect(await screen.findByText(/matched to something that isn't Movie/i)).toBeTruthy();
+    // Unresolved, not "Resolved + wrong type".
+    expect(screen.getAllByText('Unresolved').length).toBeGreaterThan(0);
+    expect(screen.queryByText('wrong type')).toBeNull();
+    expect(screen.getByRole('button', { name: /save items/i }).disabled).toBe(false);
+  });
+});
