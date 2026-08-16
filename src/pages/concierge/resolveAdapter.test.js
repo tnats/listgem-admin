@@ -86,20 +86,30 @@ describe('the shapes prod actually returns', () => {
     expect(parsed[1].inferred_type).toBe('Movie');
   });
 
-  it('builds /resolve/batch candidates with a type on every row', () => {
-    // `type` is required per candidate and the parser often sends none, so the
-    // pitch's thing_type has to fill in or the whole batch 400s.
+  it('sends the pitch type on every candidate, never a row-derived one', () => {
+    // A list holds one type, so there is no legitimate row-level variation —
+    // and a row that matched the wrong thing carries that thing's type. Letting
+    // that win constrained the search meant to correct it: a Movie pitch whose
+    // row had mismatched to a TVSeries searched TMDB's TV index and returned
+    // twenty TV results, none of them the film.
     const rows = rowsFromParsed([
       { position: 0, raw_text: 'The Matrix', inferred_type: null },
       { position: 1, raw_text: 'Slow Horses', inferred_type: 'TVSeries' },
     ]);
     expect(toBatchPayload(rows, [0, 1], 'Movie')).toEqual([
       { type: 'Movie', title: 'The Matrix' },
-      { type: 'TVSeries', title: 'Slow Horses' },
+      { type: 'Movie', title: 'Slow Horses' },
     ]);
     // …and the year rides as its own field when the text carries one.
     const dated = rowsFromParsed([{ position: 0, raw_text: 'Arrival (2016)', inferred_type: null }]);
     expect(toBatchPayload(dated, [0], 'Movie')).toEqual([{ type: 'Movie', title: 'Arrival', year: 2016 }]);
+  });
+
+  it('a saved row that matched the wrong type does not carry it forward', () => {
+    const rows = rowsFromItems([
+      { raw_text: 'Persona (1966)', thing_id: 'tvseries_wrong', resolution_status: 'resolved', thing_type_actual: 'TVSeries' },
+    ]);
+    expect(toBatchPayload(rows, [0], 'Movie')).toEqual([{ type: 'Movie', title: 'Persona', year: 1966 }]);
   });
 });
 
