@@ -17,6 +17,7 @@ import {
   offeredTransitions,
   previewUrl,
   tokenIssueBlockedReason,
+  typeMatchesPitch,
 } from './pitchRules';
 
 const pitch = (over = {}) => ({ status: 'draft', can_repitch: false, ...over });
@@ -181,5 +182,30 @@ describe('public links', () => {
     expect(isExpired('2026-08-01T00:00:00Z', now)).toBe(true);
     expect(isExpired('2026-09-01T00:00:00Z', now)).toBe(false);
     expect(isExpired(null, now)).toBe(false);
+  });
+});
+
+describe('typeMatchesPitch (the claim-time landmine)', () => {
+  it('accepts the same type', () => {
+    expect(typeMatchesPitch('Movie', 'Movie')).toBe(true);
+  });
+
+  it('rejects a different type — this is what fails at provisioning', () => {
+    // Real case: "Persona (1966)" resolved to a TVSeries on a Movie pitch. The
+    // pitch API accepted it; validate_thing_type_match RAISEs EXCEPTION on
+    // list_items, so it detonates when the target claims the draft.
+    expect(typeMatchesPitch('TVSeries', 'Movie')).toBe(false);
+    expect(typeMatchesPitch('Book', 'Movie')).toBe(false);
+  });
+
+  it('treats TVShow and TVSeries as interchangeable, as the trigger does', () => {
+    expect(typeMatchesPitch('TVShow', 'TVSeries')).toBe(true);
+    expect(typeMatchesPitch('TVSeries', 'TVShow')).toBe(true);
+  });
+
+  it('stays quiet when either side is unknown', () => {
+    // An unresolved row has no type to contradict; don't invent a problem.
+    expect(typeMatchesPitch(null, 'Movie')).toBe(true);
+    expect(typeMatchesPitch('Movie', undefined)).toBe(true);
   });
 });
