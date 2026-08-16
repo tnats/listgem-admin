@@ -5,6 +5,7 @@ import {
   useImportParse,
   usePitchMutations,
   useResolveBatch,
+  useCrawlStatus,
   useResolveOrCreate,
   useSearchToAdd,
 } from '../../api/hooks';
@@ -106,11 +107,17 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
   const [searchResults, setSearchResults] = useState(null);
   const [urlInput, setUrlInput] = useState('');
   const [addUrl, setAddUrl] = useState('');
+  // A link whose identifier we read but whose Thing we don't hold. Offering the
+  // crawl explicitly, rather than doing it silently, keeps the "don't mint junk
+  // from a random page" rule while unblocking the case where the identifier is
+  // one the crawler resolves through a source API.
+  const [creatable, setCreatable] = useState(null);
 
   const parse = useImportParse();
   const resolveBatch = useResolveBatch();
   const searchToAdd = useSearchToAdd();
   const resolveOrCreate = useResolveOrCreate();
+  const crawlStatus = useCrawlStatus();
   const { saveItems } = usePitchMutations(pitchId);
 
   // Re-seed when the server's item set changes identity (detail query settles).
@@ -149,6 +156,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     setArmedFor(searchKey);
     setSearch(prefill);
     setSearchResults(null);
+    setCreatable(null);
   }
 
   const patchRow = useCallback((index, patch) => {
@@ -281,6 +289,50 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     }
   }
 
+  /**
+   * Bring in a Thing from a link whose identifier we recognised but don't hold.
+   *
+   * Offered only after a 404 that returned canonical ids — never for an
+   * arbitrary page. For an IMDb or TMDB link the crawler resolves through the
+   * source API (crawlExtraction's imdb.com/title branch), so this produces the
+   * same entry a search would, not a scrape of whatever the page happened to
+   * expose. Creation is asynchronous: the API queues a crawl and hands back an
+   * id to poll.
+   */
+  async function createFromLink({ url, row }) {
+    setBusy('adding');
+    setNote({ ok: true, text: 'Fetching it from the source…' });
+    try {
+      const queued = await resolveOrCreate.mutateAsync({ url, create: true });
+      const crawlId = queued.crawl_id;
+      if (!crawlId) throw new Error('No crawl id returned');
+
+      for (let attempt = 0; attempt < 20; attempt++) {
+        if (cancelled.current) return;
+        await new Promise(r => setTimeout(r, 3000));
+        const status = await crawlStatus.mutateAsync(crawlId);
+        if (status.status === 'completed' && status.thingId) {
+          const res = await resolveOrCreate.mutateAsync({ url });
+          const match = normalizeCandidate({ ...(res.thing || {}), thing_id: res.thing_id || status.thingId });
+          patchRow(row, { thing_id: res.thing_id || status.thingId, match, status: 'resolved' });
+          setCreatable(null);
+          setUrlInput('');
+          setNote({ ok: true, text: `Added “${match?.title || status.thingId}” and attached it to row ${row + 1}.` });
+          return;
+        }
+        if (status.status === 'failed') {
+          setNote({ ok: false, text: `Couldn't fetch that link — ${status.error || 'the crawl failed'}. ${status.suggestion || 'Search by title instead.'}` });
+          return;
+        }
+      }
+      setNote({ ok: false, text: 'Still fetching after a minute. It may finish on its own — search by title, or try the link again shortly.' });
+    } catch (err) {
+      setNote({ ok: false, text: `Couldn't add from that link — ${apiErrorMessage(err)}` });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function runSearch(query, { context = '' } = {}) {
     if (!query.trim()) return;
     setBusy('searching');
@@ -393,6 +445,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         // context rides along so the search's own note doesn't erase the fact
         // that the link WAS understood.
         setBusy(null);
+        setCreatable({ url: url.trim(), idText, row: focus });
         await runSearch(searchTitle(focusedRow?.raw_text || ''), {
           context: `Link read${idText ? ` (${idText})` : ''} but not in our registry — `,
         });
@@ -829,6 +882,22 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                   {focusedRow.thing_id ? 'Re-point' : 'Match'}
                 </Button>
               </form>
+              {creatable && creatable.row === focus && (
+                <div className="mt-2 rounded border border-dashed border-gray-300 p-2">
+                  <div className="text-[11px] text-gray-500">
+                    We read {creatable.idText || 'the identifier'} from that link but don't hold it yet. Fetching
+                    it from the source adds it to the registry, same as picking a search result.
+                  </div>
+                  <Button
+                    size="sm"
+                    className="mt-1.5"
+                    disabled={!!busy}
+                    onClick={() => createFromLink(creatable)}
+                  >
+                    {busy === 'adding' ? 'Fetching…' : 'Add it from this link'}
+                  </Button>
+                </div>
+              )}
               <TextInput
                 className="mt-2"
                 value={focusedRow.note || ''}
