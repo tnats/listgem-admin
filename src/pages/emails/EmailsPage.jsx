@@ -69,12 +69,21 @@ export default function EmailsPage() {
         setSendResult({ ok: false, message: 'Not sent — the server has no RESEND_API_KEY configured.' });
       } else if (delivery === 'skipped_dev_mode') {
         setSendResult({ ok: false, message: 'Not sent — the server is not running in production mode; it logged the message instead.' });
-      } else {
+      } else if (delivery === 'queued') {
         // Deliberately not "delivered": Resend has accepted it, and bounces and
         // spam placement happen after that.
         setSendResult({
           ok: true,
           message: `Accepted by Resend for ${to}${providerId ? ` · id ${providerId}` : ''}. Check spam if it doesn't arrive — a [TEST] subject is itself a spam signal.`,
+        });
+      } else {
+        // No `delivery` at all. Reading that as success is the exact mistake
+        // this page just stopped making: an API that doesn't say what happened
+        // has not told us that anything did. Older builds answered a bare
+        // { sent: true }, so this is what a pre-#561 server looks like.
+        setSendResult({
+          unknown: true,
+          message: `The request was accepted for ${to}, but the API didn't report an outcome — no delivery state and no provider id. This server predates the change that reports them, so whether it sent is unknown. Check the inbox, and the Resend dashboard.`,
         });
       }
     } catch (err) {
@@ -172,7 +181,11 @@ export default function EmailsPage() {
                 </button>
               </div>
               {sendResult && (
-                <p className={`mt-2 text-xs ${sendResult.ok ? 'text-green-600' : 'text-red-600'}`}>
+                <p
+                  className={`mt-2 text-xs ${
+                    sendResult.unknown ? 'text-amber-700' : sendResult.ok ? 'text-green-600' : 'text-red-600'
+                  }`}
+                >
                   {sendResult.message}
                 </p>
               )}

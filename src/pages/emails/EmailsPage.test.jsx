@@ -59,3 +59,26 @@ describe('email send-test outcomes', () => {
     expect(await screen.findByText(/Template render failed.*reading 'map'/s)).toBeTruthy();
   });
 });
+
+describe('email send-test — an unreported outcome is not a success', () => {
+  beforeEach(() => {
+    client.get.mockReset();
+    client.post.mockReset();
+    client.get.mockResolvedValue({ data: TEMPLATES });
+  });
+
+  it('says so when the API reports no delivery state', async () => {
+    // A pre-#561 server answers a bare { sent: true }. Treating a missing
+    // `delivery` as queued reintroduces the problem this page just fixed:
+    // claiming a send happened on no evidence that it did.
+    client.post.mockResolvedValue({ data: { sent: true, to: 'tim@example.com' } });
+    renderWithProviders(<EmailsPage />);
+    await screen.findByText('Welcome');
+    fireEvent.change(screen.getByPlaceholderText(/recipient@/i), { target: { value: 'tim@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: /^send$/i }));
+
+    const msg = await screen.findByText(/didn't report an outcome/i);
+    expect(msg).toBeTruthy();
+    expect(msg.className).toMatch(/amber/);
+  });
+});
