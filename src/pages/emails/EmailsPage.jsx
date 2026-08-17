@@ -60,7 +60,23 @@ export default function EmailsPage() {
     setSendResult(null);
     try {
       const res = await client.post('/admin/email/send-test', { template: selected, data: fields, to: testEmail });
-      setSendResult({ ok: true, message: `Sent to ${res.data.to}` });
+      const { delivery, provider_id: providerId, to } = res.data;
+      // The API distinguishes three outcomes (#561). "Sent" used to cover all
+      // of them, so a send that never happened read as a success — and a
+      // genuine send that landed in spam was indistinguishable from one that
+      // was silently dropped.
+      if (delivery === 'skipped_no_api_key') {
+        setSendResult({ ok: false, message: 'Not sent — the server has no RESEND_API_KEY configured.' });
+      } else if (delivery === 'skipped_dev_mode') {
+        setSendResult({ ok: false, message: 'Not sent — the server is not running in production mode; it logged the message instead.' });
+      } else {
+        // Deliberately not "delivered": Resend has accepted it, and bounces and
+        // spam placement happen after that.
+        setSendResult({
+          ok: true,
+          message: `Accepted by Resend for ${to}${providerId ? ` · id ${providerId}` : ''}. Check spam if it doesn't arrive — a [TEST] subject is itself a spam signal.`,
+        });
+      }
     } catch (err) {
       // The API answers { error: 'Send failed', message: <the actual cause> }.
       // Showing only `error` reduced every failure to a label — "Send failed",
