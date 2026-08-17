@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import PageHeader from '../../components/PageHeader';
 import StatusBadge from '../../components/StatusBadge';
 import { useEmailTemplates } from '../../api/hooks';
+import { apiErrorMessage } from '../../api/errors';
 import client from '../../api/client';
 
 export default function EmailsPage() {
@@ -47,7 +48,7 @@ export default function EmailsPage() {
       setPreviewSubject(res.data.subject);
       setPreviewText(res.data.text);
     } catch (err) {
-      setPreviewError(err.response?.data?.error || err.message);
+      setPreviewError(apiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -61,7 +62,10 @@ export default function EmailsPage() {
       const res = await client.post('/admin/email/send-test', { template: selected, data: fields, to: testEmail });
       setSendResult({ ok: true, message: `Sent to ${res.data.to}` });
     } catch (err) {
-      setSendResult({ ok: false, message: err.response?.data?.error || err.message });
+      // The API answers { error: 'Send failed', message: <the actual cause> }.
+      // Showing only `error` reduced every failure to a label — "Send failed",
+      // with the SMTP reason or the template's own exception thrown away.
+      setSendResult({ ok: false, message: apiErrorMessage(err) });
     } finally {
       setSending(false);
     }
