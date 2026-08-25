@@ -587,3 +587,44 @@ describe('builder — a lagging refetch must not undo the operator', () => {
     expect(screen.getByText(/stored item set changed while you were working/i)).toBeTruthy();
   });
 });
+
+describe('builder — an unsaved build survives a reload', () => {
+  const PASTED = [
+    { raw_text: 'Persona (1966)', thing_id: 'movie_persona_1966_aa', status: 'resolved', candidates: [], match: { title: 'Persona', type: 'Movie', year: 1966 }, note: '', dropped: false, confidence: 1, reason: null },
+  ];
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.put.mockReset();
+    client.get.mockRejectedValue(new Error('no search'));
+    client.put.mockResolvedValue({ data: { success: true, item_count: 1 } });
+  });
+
+  it('restores the rows and says so', () => {
+    // Losing one was silent and total: the pitch looked untouched and every
+    // adjudication since the paste was gone.
+    sessionStorage.setItem('pitchDraft:p_1', JSON.stringify({ v: 1, savedAt: Date.now(), rows: PASTED }));
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={[]} />);
+
+    // Appears in the table and again in the focused-row editor header.
+    expect(screen.getAllByText('Persona (1966)').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Unsaved work restored/i)).toBeTruthy();
+    // Restored work counts as unsaved, so Save is live.
+    expect(screen.getByRole('button', { name: /save items/i }).disabled).toBe(false);
+  });
+
+  it('keeps the draft out of the way once the pitch holds it', async () => {
+    sessionStorage.setItem('pitchDraft:p_1', JSON.stringify({ v: 1, savedAt: Date.now(), rows: PASTED }));
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={[]} />);
+    fireEvent.click(screen.getByRole('button', { name: /save items/i }));
+
+    await vi.waitFor(() => expect(client.put).toHaveBeenCalled());
+    await vi.waitFor(() => expect(sessionStorage.getItem('pitchDraft:p_1')).toBeNull());
+  });
+
+  it('does not restore one pitch draft onto another', () => {
+    sessionStorage.setItem('pitchDraft:p_OTHER', JSON.stringify({ v: 1, savedAt: Date.now(), rows: PASTED }));
+    renderWithProviders(<PitchBuilder pitchId="p_1" thingType="Movie" items={[]} />);
+    expect(screen.queryByText('Persona (1966)')).toBeNull();
+  });
+});
