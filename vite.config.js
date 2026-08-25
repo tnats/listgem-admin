@@ -36,6 +36,9 @@ export default defineConfig({
     // jsdom is pinned to ^26: 27 pulls a CJS→ESM require chain that needs
     // Node ≥20.19 (dev is on 20.18).
     environment: 'jsdom',
+    // Clears storage between tests — the builder persists drafts, and a leaked
+    // one restores into the next case.
+    setupFiles: ['./src/test/setup.js'],
     globals: true,
     include: ['src/**/*.test.{js,jsx}'],
     restoreMocks: true,
