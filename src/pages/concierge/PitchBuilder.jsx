@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import DataTable from '../../components/DataTable';
+import Modal from '../../components/Modal';
 import { Button, Field, TextArea, TextInput } from '../../components/Form';
 import {
   useImportParse,
@@ -122,6 +123,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
   // Restored work is unsaved by definition, so Save is live and the guards are on.
   const [dirty, setDirty] = useState(!!restored.current.draft);
   const [showRestored, setShowRestored] = useState(!!restored.current.draft);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [urlInput, setUrlInput] = useState('');
@@ -197,6 +199,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
   // Two rows pointing at one film. Distinct from the paste-time text check:
   // these arrive from resolution, so only the matched ids expose them.
   const duplicates = duplicateIndices(rows);
+  const savedCount = rowsFromItems(items).length;
   const focusedRow = rows[focus];
   const prefill = focusedRow ? queryFor(focusedRow).title : '';
 
@@ -607,6 +610,26 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     setDirty(true);
   }
 
+  /**
+   * Throw the build away and go back to what the pitch actually holds.
+   *
+   * Reloading doesn't do this — a draft is restored precisely so a reload
+   * can't destroy it — and until there was a control that said so, the only
+   * ways out were a pasted Replace or closing the tab.
+   */
+  function discardBuild() {
+    setRows(rowsFromItems(items));
+    clearDraft(pitchId);
+    restored.current.draft = null;
+    setShowRestored(false);
+    setStaleWarning(false);
+    setDirty(false);
+    setFocus(0);
+    setShowPaste(rowsFromItems(items).length === 0);
+    setConfirmDiscard(false);
+    setNote({ ok: true, text: 'Build discarded. Showing the pitch\u2019s saved items.' });
+  }
+
   async function save() {
     // Guard the operation, not the button. Save is reachable from the `s`
     // shortcut too, which is how a TVSeries reached a Movie pitch after the
@@ -937,6 +960,11 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
           </Button>
           <div className="ml-auto flex items-center gap-2">
             {dirty && <span className="text-xs text-amber-600">unsaved changes</span>}
+            {dirty && (
+              <Button disabled={!!busy} onClick={() => setConfirmDiscard(true)}>
+                Discard build
+              </Button>
+            )}
             <Button
               variant="primary"
               onClick={save}
@@ -959,6 +987,28 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
           {busy === 'rechecking' ? 'Re-checking pending rows on the 60s deadline…' : `${busy}…`}
         </div>
       )}
+
+      <Modal
+        open={confirmDiscard}
+        onClose={() => setConfirmDiscard(false)}
+        title="Discard this build?"
+        description={`${counts.kept} row(s) on screen have not been saved to the pitch.`}
+        footer={
+          <>
+            <Button onClick={() => setConfirmDiscard(false)}>Keep working</Button>
+            <Button variant="danger" onClick={discardBuild}>
+              Discard build
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-gray-600">
+          {savedCount === 0
+            ? 'The pitch has no saved items, so this empties the list and you can start from a fresh paste.'
+            : `The pitch keeps the ${savedCount} item(s) it already holds — the list goes back to those.`}{' '}
+          This cannot be undone.
+        </p>
+      </Modal>
 
       {/* Paste box */}
       {showPaste && !readOnly && (
