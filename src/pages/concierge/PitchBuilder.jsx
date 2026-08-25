@@ -12,6 +12,7 @@ import {
 import { apiErrorMessage } from '../../api/errors';
 import { typeMatchesPitch } from './pitchRules';
 import { diagnosticsText } from './diagnostics';
+import { clearDraft, readDraft, saveDraft } from './draftStore';
 import {
   ROW_STATUS,
   applyBatchResults,
@@ -106,13 +107,19 @@ function CandidateRow({ candidate, chosen, onPick, busy, wrongType }) {
  * bulk-adjudicate fifty rows, so this optimises for throughput.
  */
 export default function PitchBuilder({ pitchId, thingType, items, readOnly, readOnlyReason }) {
-  const [rows, setRows] = useState(() => rowsFromItems(items));
+  // An unsaved build survives a reload. Losing one was previously silent and
+  // total: the pitch looked untouched and every adjudication was gone.
+  const restored = useRef(null);
+  if (restored.current === null) restored.current = { draft: readDraft(pitchId) };
+  const [rows, setRows] = useState(() => restored.current.draft?.rows || rowsFromItems(items));
   const [paste, setPaste] = useState('');
   const [showPaste, setShowPaste] = useState(() => rowsFromItems(items).length === 0);
   const [focus, setFocus] = useState(0);
   const [note, setNote] = useState(null);
   const [busy, setBusy] = useState(null); // 'parsing' | 'resolving' | 'saving' | 'rechecking'
-  const [dirty, setDirty] = useState(false);
+  // Restored work is unsaved by definition, so Save is live and the guards are on.
+  const [dirty, setDirty] = useState(!!restored.current.draft);
+  const [showRestored, setShowRestored] = useState(!!restored.current.draft);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [urlInput, setUrlInput] = useState('');
@@ -150,9 +157,8 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       // what we sent; the screen already shows it.
       skipNextSeed.current = false;
     } else if (dirty) {
-      // Someone or something changed the stored set while this build was in
-      // progress. Local work wins, but say so rather than silently diverging.
-      setStaleWarning(true);
+      // Restored work is ours and expected; a change arriving mid-build is not.
+      if (!restored.current.draft) setStaleWarning(true);
     } else {
       setRows(rowsFromItems(items));
     }
@@ -160,6 +166,20 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
 
   const cancelled = useRef(false);
   useEffect(() => () => { cancelled.current = true; }, []);
+
+  useEffect(() => {
+    if (readOnly) return;
+    if (dirty && rows.length) saveDraft(pitchId, rows);
+    else if (!dirty) clearDraft(pitchId);
+  }, [rows, dirty, pitchId, readOnly]);
+
+  // The browser's own guard, for the reload that isn't a deliberate discard.
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const onBeforeUnload = e => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
 
   // Latest rows for async work that started before the last render committed.
   const rowsRef = useRef(rows);
@@ -593,6 +613,9 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       // The invalidation this triggers may read a replica that hasn't caught
       // up; don't let that overwrite what we just wrote.
       skipNextSeed.current = true;
+      restored.current.draft = null;
+      setShowRestored(false);
+      clearDraft(pitchId);
       setStaleWarning(false);
       setDirty(false);
       setRows(rs => rs.filter(r => !r.dropped));
@@ -756,6 +779,14 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       {note && (
         <div className={`rounded p-2 text-xs ${note.ok ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-800'}`}>
           {note.text}
+        </div>
+      )}
+
+      {showRestored && dirty && (
+        <div className="rounded border border-indigo-200 bg-indigo-50 p-2 text-xs text-indigo-800">
+          <span className="font-medium">Unsaved work restored.</span> This build was recovered from before the
+          page reloaded — {rows.length} row(s), not yet saved to the pitch. Save to keep it, or reload the
+          pitch from the board to discard it.
         </div>
       )}
 
