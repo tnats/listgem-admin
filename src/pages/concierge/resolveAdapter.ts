@@ -61,6 +61,8 @@ export interface BuilderRow {
   dropped: boolean;
   confidence: number | null;
   reason: string | null;
+  /** Set for pasted rows: what the block-aware cleaner made of the raw text. */
+  query?: RowQuery | null;
 }
 
 /** The part of a row that resolution owns. */
@@ -325,6 +327,100 @@ export function chunkForBatch(indices: number[], size: number = BATCH_LIMIT): nu
  * `raw_text` is left untouched: it's what the operator recognises, and what the
  * target inherits on an unresolved row.
  */
+/** Structural noise that is never part of a title, whatever the paste looks like. */
+const REF_MARKS = /\s*\[\s*\d+\s*\]/g;
+const FOOTNOTE_MARKS = /[\u2020\u2021]/g;
+const MONEY = /\s*[$\u00a3\u20ac\u00a5]\s?\d[\d,]*(?:\.\d+)?(?:\s*(?:million|billion|bn|m)\b)?/gi;
+/** A leading integer with no punctuation after it — a rank cell, or a title. */
+const RANK_CELL = /^\s*(\d{1,3})\s+(?=\S)/;
+const TRAILING_YEAR = /\s+((?:19|20)\d{2})\s*$/;
+
+/** What we actually ask the matcher for, per row. */
+export interface RowQuery {
+  title: string;
+  year: number | null;
+  /** A column-heading row rather than an item — "Rank Film Year Gross Ref". */
+  header: boolean;
+}
+
+/**
+ * Clean a whole pasted block at once, because the ambiguous parts of a table
+ * row can only be read from the block.
+ *
+ * A pasted Wikipedia table row looks like `1 It 2017 $719,766,009 [1][2]`, and
+ * per-row rules cannot safely strip either end of it: a leading integer is a
+ * rank in that table and the title in `28 Days Later`, and a trailing year is
+ * a year column here and part of the name in `Blade Runner 2049`. Across the
+ * block the ambiguity resolves — a rank column counts 1, 2, 3 down the rows,
+ * and a year column only appears alongside the other columns.
+ *
+ * This was not academic: a 41-row paste of the highest-grossing horror films
+ * sent every one of those strings to the matcher as the title. The long
+ * distinctive names survived it; `It`, `Signs` and `The Ring` drowned in the
+ * noise and came back with no candidates at all.
+ */
+export function tableQueries(rawTexts: string[]): RowQuery[] {
+  const texts = (rawTexts || []).map(t => t || '');
+
+  // A rank column: most rows open with a bare integer and those integers climb.
+  // Ascending alone is too weak — 12 Angry Men, 28 Days Later, 300 climb by
+  // accident — so it also takes one of two corroborations: the numbers step by
+  // one, or the rest of the block is visibly tabular. The second matters,
+  // because an operator who deletes a few rows leaves gaps in the numbering
+  // and the sequence test alone would then hand the ranks to the matcher.
+  const ranks = texts.map(t => {
+    const m = t.match(RANK_CELL);
+    return m ? Number(m[1]) : null;
+  });
+  const present = ranks.filter((r): r is number => r !== null);
+  const ascending = present.every((r, i) => i === 0 || r > present[i - 1]);
+  const steps = present.filter((r, i) => i > 0 && r === present[i - 1] + 1).length;
+  const columnar = texts.filter(t => t.replace(REF_MARKS, '').replace(MONEY, ' ') !== t).length;
+  const rankColumn =
+    present.length >= 3 &&
+    present.length >= texts.length * 0.6 &&
+    ascending &&
+    (steps >= (present.length - 1) * 0.8 || columnar >= texts.length * 0.6);
+
+  return texts.map((raw, i) => {
+    // A heading only reads as one against the table it heads: every item row
+    // carries a rank and this one doesn't.
+    const header = rankColumn && i === 0 && ranks[0] === null;
+
+    let text = raw.replace(REF_MARKS, '').replace(FOOTNOTE_MARKS, ' ').replace(MONEY, ' ');
+    // Only these columns prove the row is tabular. Without them a trailing
+    // year is just as likely to be part of the name.
+    let tabular = text !== raw;
+    if (rankColumn && ranks[i] !== null) {
+      text = text.replace(RANK_CELL, '');
+      tabular = true;
+    }
+
+    let year: number | null = null;
+    if (tabular) {
+      const m = text.match(TRAILING_YEAR);
+      // "Blade Runner 2049 2017" gives up the year column and keeps its name;
+      // a row that is only a year ("1917") keeps all of it.
+      if (m && text.replace(TRAILING_YEAR, '').trim()) {
+        year = Number(m[1]);
+        text = text.replace(TRAILING_YEAR, '');
+      }
+    }
+
+    return { title: searchTitle(text), year: year ?? extractYear(raw), header };
+  });
+}
+
+/**
+ * The query for one row. Rows built from a paste carry the block-aware result;
+ * anything else — a link, a catalogue pick, a saved item — falls back to what
+ * can be read from the row alone.
+ */
+export function queryFor(row: BuilderRow): RowQuery {
+  if (row.query) return row.query;
+  return { title: searchTitle(row.raw_text), year: extractYear(row.raw_text), header: false };
+}
+
 export function searchTitle(rawText: string): string {
   return (rawText || '')
     // leading list decoration the parser may leave behind
@@ -336,6 +432,11 @@ export function searchTitle(rawText: string): string {
     .replace(/[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
     // a trailing year, or a run of them: "(1971, 1972)"
     .replace(/\s*\((?:\s*(?:19|20)\d{2}\s*,?)+\)\s*/g, ' ')
+    // wikipedia reference marks and the footnote daggers beside them
+    .replace(REF_MARKS, '')
+    .replace(FOOTNOTE_MARKS, ' ')
+    // box-office columns: "$719,766,009", "£12.4 million"
+    .replace(MONEY, ' ')
     // whatever separators the decoration left stranded
     .replace(/\s*[|·–—-]\s*$/, '')
     .replace(/\s{2,}/g, ' ')
@@ -365,11 +466,10 @@ export function toBatchPayload(
   fallbackType: string,
 ): ResolveRequest[] {
   return indices.map(rowIndex => {
-    const raw = rows[rowIndex].raw_text;
-    const year = extractYear(raw);
+    const { title, year } = queryFor(rows[rowIndex]);
     return {
       type: fallbackType,
-      title: searchTitle(raw),
+      title,
       ...(year ? { year } : {}),
     };
   });
@@ -446,16 +546,20 @@ export function summarize(rows: Pick<BuilderRow, 'status' | 'dropped'>[]): RowCo
 
 /** Rows straight from pasted text, before any resolution has run. */
 export function rowsFromParsed(parsed: ParsedCandidate[]): BuilderRow[] {
-  return parsed.map(p => ({
+  const queries = tableQueries(parsed.map(p => p.raw_text));
+  return parsed.map((p, i) => ({
     raw_text: p.raw_text,
     thing_id: null,
     status: 'unresolved',
     candidates: [],
     match: null,
-    note: '',
-    dropped: false,
+    // Dropped rather than removed: it stays visible and struck through, and
+    // one keystroke puts it back if the guess was wrong.
+    note: queries[i].header ? 'Column headings, not an item.' : '',
+    dropped: queries[i].header,
     confidence: null,
     reason: null,
+    query: queries[i],
   }));
 }
 
