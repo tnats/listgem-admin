@@ -13,6 +13,8 @@ import {
   rowsFromParsed,
   extractYear,
   searchTitle,
+  tableQueries,
+  queryFor,
   summarize,
   toBatchPayload,
   toItemsPayload,
@@ -423,5 +425,92 @@ describe('normalizeParseOutcome — a clipped paste must not look complete', () 
     // A parser that says nothing has not said it clipped; don't invent a warning.
     expect(normalizeParseOutcome({ candidates: [] }).truncated).toBe(false);
     expect(normalizeParseOutcome(null).truncated).toBe(false);
+  });
+});
+
+describe('tableQueries — a pasted table, read as a block', () => {
+  // Verbatim from the run that sent all 41 of these to the matcher as titles.
+  const HORROR = [
+    'Rank Film Year Worldwide gross Ref',
+    '1 It 2017 $719,766,009 [1][2]',
+    '2 The Sixth Sense 1999 $672,806,292 [3][4]',
+    '3 I Am Legend 2007 $585,532,684 [5][6]',
+    '4 World War Z 2013 $540,007,876 [7][8]',
+    '5 Obsession \u2020 2026 $501,596,715 [9][10]',
+    '6 The Conjuring: Last Rites 2025 $499,256,445 [11][12]',
+    '11 Signs 2002 $408,250,578 [21][22]',
+    '39 The Ring 2002 $249,348,933 [77][78]',
+  ];
+
+  it('asks for the title, not the whole row', () => {
+    const q = tableQueries(HORROR);
+    expect(q.map(r => r.title)).toEqual([
+      'Rank Film Year Worldwide gross Ref',
+      'It',
+      'The Sixth Sense',
+      'I Am Legend',
+      'World War Z',
+      'Obsession',
+      'The Conjuring: Last Rites',
+      'Signs',
+      'The Ring',
+    ]);
+  });
+
+  it('reads the year column as the year', () => {
+    expect(tableQueries(HORROR).map(r => r.year)).toEqual([
+      null, 2017, 1999, 2007, 2013, 2026, 2025, 2002, 2002,
+    ]);
+  });
+
+  it('marks the heading row, and nothing else', () => {
+    const q = tableQueries(HORROR);
+    expect(q[0].header).toBe(true);
+    expect(q.slice(1).every(r => r.header === false)).toBe(true);
+  });
+
+  it('keeps a number that is part of the title', () => {
+    // No rank column here: the leading integers do not count up.
+    const titles = tableQueries(['28 Days Later', '12 Angry Men', '300', '1917']).map(r => r.title);
+    expect(titles).toEqual(['28 Days Later', '12 Angry Men', '300', '1917']);
+  });
+
+  it('keeps a year that is part of the title', () => {
+    // Two years on the row: the column is the trailing one.
+    const [q] = tableQueries([
+      '17 Blade Runner 2049 2017 $259,239,658 [1]',
+      '18 Alien 1979 $203,630,630 [2]',
+      '19 Arrival 2016 $203,388,186 [3]',
+    ]);
+    expect(q.title).toBe('Blade Runner 2049');
+    expect(q.year).toBe(2017);
+  });
+
+  it('leaves a plain list alone', () => {
+    // "Blade Runner 2049" outside a table is a name, not a name and a year.
+    expect(tableQueries(['Blade Runner 2049', 'Arrival', 'Dune']).map(r => r.title)).toEqual([
+      'Blade Runner 2049', 'Arrival', 'Dune',
+    ]);
+  });
+
+  it('handles an empty block', () => {
+    expect(tableQueries([])).toEqual([]);
+    expect(tableQueries(['', '  '])).toEqual([
+      { title: '', year: null, header: false },
+      { title: '', year: null, header: false },
+    ]);
+  });
+});
+
+describe('queryFor', () => {
+  const row = raw => ({ raw_text: raw, thing_id: null, status: 'unresolved', candidates: [], match: null, note: '', dropped: false, confidence: null, reason: null });
+
+  it('uses what the block-aware pass worked out', () => {
+    expect(queryFor({ ...row('1 It 2017 $719,766,009 [1][2]'), query: { title: 'It', year: 2017, header: false } }))
+      .toEqual({ title: 'It', year: 2017, header: false });
+  });
+
+  it('falls back to the row alone for a link or a catalogue pick', () => {
+    expect(queryFor(row('Persona (1966)'))).toEqual({ title: 'Persona', year: 1966, header: false });
   });
 });

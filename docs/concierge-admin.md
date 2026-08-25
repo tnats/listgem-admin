@@ -130,6 +130,22 @@ registry first. There is no free-text escape hatch: with a live vocabulary, free
 `/imports/parse` failures fall back to splitting pasted text one item per line, so a build can still
 proceed by hand.
 
+### What the matcher is actually asked
+
+The row shows the pasted text; the matcher gets `queryFor(row).title`, which is not the same string.
+Pasted blocks go through `tableQueries()` in `resolveAdapter.ts`, which reads the block as a whole
+because the ambiguous parts of a table row cannot be read from one row: a leading integer is a rank in
+`1 It 2017 $719,766,009 [1][2]` and the title in `28 Days Later`, and a trailing year is a column here
+and part of the name in `Blade Runner 2049`. A rank column is only believed when most rows start with an
+ascending integer *and* either the numbers step by one or the rest of the block carries money and
+reference columns. Column headings — a first row with no rank where every item row has one — arrive
+dropped, struck through, and one `x` puts them back.
+
+Reference marks, currency amounts and footnote daggers are stripped per row regardless, since none of
+them is ever part of a title. When a resolve goes wrong, **Copy diagnostics** reports `search_title` and
+`search_year` beside `raw_text`; if those two are identical the cleaner did nothing, which is the first
+thing to check.
+
 ## Verifying against prod
 
 Prod is the only environment, and this feature writes **real people's contact details**. Anything created

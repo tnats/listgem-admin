@@ -1,5 +1,5 @@
 import { recentRequests } from '../../api/requestLog';
-import { searchTitle } from './resolveAdapter';
+import { queryFor } from './resolveAdapter';
 import { typeMatchesPitch } from './pitchRules';
 
 /**
@@ -23,7 +23,8 @@ export function buildDiagnostics({ pitchId, thingType, rows, counts, capturedAt 
       n: i + 1,
       raw_text: row.raw_text,
       // What we actually send the matcher, which is not what the row displays.
-      search_title: searchTitle(row.raw_text),
+      search_title: queryFor(row).title,
+      search_year: queryFor(row).year,
       status: row.status,
       dropped: row.dropped || undefined,
       thing_id: row.thing_id,

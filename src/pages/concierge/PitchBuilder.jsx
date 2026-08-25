@@ -22,7 +22,7 @@ import {
   normalizeParseOutcome,
   normalizeParsed,
   normalizeSearchResults,
-  searchTitle,
+  queryFor,
   pendingIndices,
   rowsFromItems,
   rowsFromParsed,
@@ -193,7 +193,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     .map((row, i) => ({ row, i }))
     .filter(({ row }) => !row.dropped && row.thing_id && !typeMatchesPitch(row.match?.type, thingType));
   const focusedRow = rows[focus];
-  const prefill = focusedRow ? searchTitle(focusedRow.raw_text) : '';
+  const prefill = focusedRow ? queryFor(focusedRow).title : '';
 
   // Moving to another row re-arms the box for that row: the previous row's
   // query and results are meaningless here. Keyed on the row's identity rather
@@ -569,7 +569,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         // that the link WAS understood.
         setBusy(null);
         setCreatable({ url: url.trim(), idText, row: focus });
-        await runSearch(searchTitle(focusedRow?.raw_text || ''), {
+        await runSearch(focusedRow ? queryFor(focusedRow).title : '', {
           context: `Link read${idText ? ` (${idText})` : ''} but not in our registry — `,
         });
         return;
@@ -1005,13 +1005,13 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                 className="flex gap-2"
                 onSubmit={e => {
                   e.preventDefault();
-                  runSearch(search || searchTitle(focusedRow.raw_text));
+                  runSearch(search || queryFor(focusedRow).title);
                 }}
               >
                 <TextInput
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder={`Search catalogue — “${searchTitle(focusedRow.raw_text).slice(0, 32)}”`}
+                  placeholder={`Search catalogue — “${queryFor(focusedRow).title.slice(0, 32)}”`}
                 />
                 <Button type="submit" disabled={busy === 'searching'}>
                   Search
