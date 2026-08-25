@@ -665,3 +665,53 @@ describe('builder — the same item twice', () => {
     expect(sent[0].thing_id).toBe('movie_alien_1979');
   });
 });
+
+describe('builder — discarding a build', () => {
+  const drafted = [
+    { raw_text: 'Alien', thing_id: 'movie_alien_1979', status: 'resolved', candidates: [], match: { title: 'Alien', type: 'Movie', year: 1979 }, note: '', dropped: false, confidence: 1, reason: null },
+  ];
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.get.mockRejectedValue(new Error('no search'));
+    sessionStorage.setItem('pitchDraft:p_d', JSON.stringify({ v: 1, savedAt: Date.now(), rows: drafted }));
+  });
+
+  it('asks first, and keeps the build if the answer is no', () => {
+    renderWithProviders(<PitchBuilder pitchId="p_d" thingType="Movie" items={[]} />);
+    fireEvent.click(screen.getByRole('button', { name: /discard build/i }));
+    fireEvent.click(screen.getByRole('button', { name: /keep working/i }));
+
+    expect(screen.getAllByText('Alien').length).toBeGreaterThan(0);
+    expect(sessionStorage.getItem('pitchDraft:p_d')).toBeTruthy();
+  });
+
+  it('clears the rows and the draft, so a reload cannot bring them back', async () => {
+    renderWithProviders(<PitchBuilder pitchId="p_d" thingType="Movie" items={[]} />);
+    fireEvent.click(screen.getByRole('button', { name: /discard build/i }));
+    // Two buttons now read "Discard build" — the toolbar's and the modal's.
+    const inModal = screen.getAllByRole('button', { name: /^discard build$/i });
+    fireEvent.click(inModal[inModal.length - 1]);
+
+    await vi.waitFor(() => expect(screen.queryByText('Alien')).toBeNull());
+    expect(sessionStorage.getItem('pitchDraft:p_d')).toBeNull();
+    expect(screen.queryByText(/unsaved changes/i)).toBeNull();
+  });
+
+  it('goes back to the items the pitch holds, not to nothing', async () => {
+    const saved = [{ position: 1, thing_id: 'movie_jaws_1975', thing_metadata: { title: 'Jaws', year: 1975 }, thing_type_actual: 'Movie', raw_text: 'Jaws' }];
+    renderWithProviders(<PitchBuilder pitchId="p_d" thingType="Movie" items={saved} />);
+    fireEvent.click(screen.getByRole('button', { name: /discard build/i }));
+    const inModal = screen.getAllByRole('button', { name: /^discard build$/i });
+    fireEvent.click(inModal[inModal.length - 1]);
+
+    await vi.waitFor(() => expect(screen.getAllByText('Jaws').length).toBeGreaterThan(0));
+    expect(screen.queryByText('Alien')).toBeNull();
+  });
+
+  it('offers nothing to discard on a clean build', () => {
+    sessionStorage.clear();
+    renderWithProviders(<PitchBuilder pitchId="p_d" thingType="Movie" items={[]} />);
+    expect(screen.queryByRole('button', { name: /discard build/i })).toBeNull();
+  });
+});

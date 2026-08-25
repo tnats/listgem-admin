@@ -144,6 +144,14 @@ dropped, struck through, and one `x` puts them back.
 Reference marks, currency amounts and footnote daggers are stripped per row regardless, since none of
 them is ever part of a title.
 
+### Discarding a build
+
+A reload does not clear the builder — a draft is restored precisely so a reload can't destroy one — so
+**Discard build** in the toolbar is the way out, shown only while there are unsaved changes. It confirms
+first, then returns the list to the items the pitch actually holds (or empties it, if there are none) and
+clears the draft. A pasted **Replace all & resolve** does the same thing in passing when the intent is to
+start over from new text.
+
 ### Duplicates
 
 Two checks, because they catch different things. Pasting again skips lines already on the list and says
