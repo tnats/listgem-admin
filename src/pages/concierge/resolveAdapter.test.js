@@ -15,6 +15,8 @@ import {
   searchTitle,
   tableQueries,
   queryFor,
+  dedupeAgainst,
+  duplicateIndices,
   summarize,
   toBatchPayload,
   toItemsPayload,
@@ -63,16 +65,29 @@ describe('the shapes prod actually returns', () => {
     // The server said it could not match this. One suggestion is an option for
     // the operator, not a resolution — adopting it would silently invent a link.
     const res = normalizeResolution(PROD_NO_MATCH);
-    expect(res.status).toBe('unresolved');
     expect(res.thing_id).toBeNull();
     expect(res.candidates).toHaveLength(1);
     expect(res.reason).toBe('no_confident_match');
   });
 
+  it('calls a no_match that carries suggestions ambiguous, not unresolved', () => {
+    // "Not confident, you pick" is a different instruction from "no such
+    // thing", and reporting both as unresolved gave the operator no reason to
+    // open the row. Three films in a 40-row build sat as failures with the
+    // right match already sitting in their candidate list.
+    expect(normalizeResolution(PROD_NO_MATCH).status).toBe('ambiguous');
+  });
+
+  it('still calls a no_match with nothing to offer unresolved', () => {
+    const res = normalizeResolution({ ...PROD_NO_MATCH, suggestions: [] });
+    expect(res.status).toBe('unresolved');
+    expect(res.thing_id).toBeNull();
+  });
+
   it('maps the batch envelope back onto rows', () => {
     const rows = rowsFromParsed(normalizeParsed(['The Matrix', 'zzzz nonsense qqq']));
     const next = applyBatchResults(rows, batchResults({ results: [PROD_FOUND, PROD_NO_MATCH], count: 2 }), [0, 1]);
-    expect(next.map(r => r.status)).toEqual(['resolved', 'unresolved']);
+    expect(next.map(r => r.status)).toEqual(['resolved', 'ambiguous']);
   });
 
   it('parses the real /imports/parse envelope, 0-based positions and all', () => {
@@ -172,9 +187,14 @@ describe('normalizeParsed', () => {
 });
 
 describe('batching', () => {
-  it('splits at the 200-item rate-limit unit', () => {
-    const chunks = chunkForBatch([...Array(450).keys()]);
+  it('splits at the rate-limit unit', () => {
+    const chunks = chunkForBatch([...Array(250).keys()]);
     expect(chunks.map(c => c.length)).toEqual([BATCH_LIMIT, BATCH_LIMIT, 50]);
+  });
+
+  it('keeps a full chunk clear of the server deadline', () => {
+    // ~0.25s an item measured against prod, against a 60s server deadline.
+    expect(BATCH_LIMIT * 0.25).toBeLessThan(40);
   });
 
   it('sends a batch payload in the order the indices were given', () => {
@@ -512,5 +532,45 @@ describe('queryFor', () => {
 
   it('falls back to the row alone for a link or a catalogue pick', () => {
     expect(queryFor(row('Persona (1966)'))).toEqual({ title: 'Persona', year: 1966, header: false });
+  });
+});
+
+describe('duplicates', () => {
+  const row = (raw, thingId = null) => ({
+    raw_text: raw, thing_id: thingId, status: thingId ? 'resolved' : 'unresolved',
+    candidates: [], match: null, note: '', dropped: false, confidence: null, reason: null,
+  });
+
+  it('skips a re-paste of lines already on the list', () => {
+    // The builder keeps unsaved work now, so pasting again lands on rows that
+    // are already there: a 40-film list became 82 rows.
+    const existing = [row('1 It 2017 $719,766,009 [1][2]'), row('2 The Sixth Sense 1999 $672,806,292 [3][4]')];
+    const { rows, skipped } = dedupeAgainst(existing, [
+      row('1 It 2017 $719,766,009 [1][2]'),
+      row('  2 THE SIXTH SENSE 1999 $672,806,292 [3][4] '),
+      row('3 I Am Legend 2007 $585,532,684 [5][6]'),
+    ]);
+    expect(skipped).toBe(2);
+    expect(rows.map(r => r.raw_text)).toEqual(['3 I Am Legend 2007 $585,532,684 [5][6]']);
+  });
+
+  it('does not treat a dropped row as occupying the list', () => {
+    const existing = [{ ...row('Jaws'), dropped: true }];
+    expect(dedupeAgainst(existing, [row('Jaws')]).skipped).toBe(0);
+  });
+
+  it('catches two different lines that resolved to one film', () => {
+    const rows = [row('Alien', 'movie_alien_1979'), row('Alien (1979)', 'movie_alien_1979'), row('Jaws', 'movie_jaws_1975')];
+    // The first of each is kept; only the repeat is reported.
+    expect(duplicateIndices(rows)).toEqual([1]);
+  });
+
+  it('does not call two unresolved rows duplicates of each other', () => {
+    expect(duplicateIndices([row('Obsession'), row('Obsession')])).toEqual([]);
+  });
+
+  it('ignores a dropped repeat', () => {
+    const rows = [row('Alien', 'movie_alien_1979'), { ...row('Alien', 'movie_alien_1979'), dropped: true }];
+    expect(duplicateIndices(rows)).toEqual([]);
   });
 });

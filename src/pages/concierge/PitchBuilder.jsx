@@ -23,6 +23,8 @@ import {
   normalizeParsed,
   normalizeSearchResults,
   queryFor,
+  dedupeAgainst,
+  duplicateIndices,
   pendingIndices,
   rowsFromItems,
   rowsFromParsed,
@@ -192,6 +194,9 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
   const mismatched = rows
     .map((row, i) => ({ row, i }))
     .filter(({ row }) => !row.dropped && row.thing_id && !typeMatchesPitch(row.match?.type, thingType));
+  // Two rows pointing at one film. Distinct from the paste-time text check:
+  // these arrive from resolution, so only the matched ids expose them.
+  const duplicates = duplicateIndices(rows);
   const focusedRow = rows[focus];
   const prefill = focusedRow ? queryFor(focusedRow).title : '';
 
@@ -311,7 +316,12 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         text: `Parser unreachable (${apiErrorMessage(err)}). Split ${parsed.length} line(s) locally instead.`,
       });
     }
-    const fresh = rowsFromParsed(parsed);
+    const parsedRows = rowsFromParsed(parsed);
+    // Appending the same list twice is the easy mistake — the builder keeps
+    // unsaved work now, so a re-paste lands on rows that are already there.
+    const { rows: fresh, skipped } = replace
+      ? { rows: parsedRows, skipped: 0 }
+      : dedupeAgainst(rows, parsedRows);
     const next = replace ? fresh : [...rows, ...fresh];
     setRows(next);
     setDirty(true);
@@ -320,8 +330,14 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     setBusy(null);
     const startAt = replace ? 0 : rows.length;
     await resolveIndices(fresh.map((_, i) => startAt + i), { source: next });
-    // After the resolve, so it isn't overwritten by the resolve's own note.
+    // After the resolve, so neither is overwritten by the resolve's own note.
     if (clipped) setNote({ ok: false, text: clipped });
+    else if (skipped > 0) {
+      setNote({
+        ok: true,
+        text: `Added ${fresh.length} row(s). Skipped ${skipped} already on the list — re-paste with Replace if you meant to start over.`,
+      });
+    }
   }
 
   /**
@@ -605,6 +621,15 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       });
       return;
     }
+    if (duplicates.length > 0) {
+      setNote({
+        ok: false,
+        text: `Not saved — row ${duplicates.map(i => i + 1).join(', ')} ${
+          duplicates.length === 1 ? 'repeats an item' : 'repeat items'
+        } already on the list. Drop the repeats, or keep them deliberately by re-matching.`,
+      });
+      return;
+    }
     setBusy('saving');
     setNote(null);
     try {
@@ -808,6 +833,27 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         </div>
       )}
 
+      {duplicates.length > 0 && (
+        <div className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+          <span className="font-medium">
+            Row {duplicates.map(i => i + 1).join(', ')} {duplicates.length === 1 ? 'is' : 'are'} already on
+            this list.
+          </span>{' '}
+          The same film twice reads as carelessness on the pitch itself. Dropping keeps the first of each.
+          <button
+            onClick={() => {
+              const drop = new Set(duplicates);
+              setRows(rs => rs.map((r, i) => (drop.has(i) ? { ...r, dropped: true } : r)));
+              setDirty(true);
+            }}
+            disabled={readOnly}
+            className="ml-2 font-medium underline decoration-dotted underline-offset-2 disabled:no-underline disabled:opacity-50"
+          >
+            Drop {duplicates.length === 1 ? 'it' : `all ${duplicates.length}`}
+          </button>
+        </div>
+      )}
+
       {/* Summary */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
         <span className="tabular-nums">
@@ -820,6 +866,9 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         {counts.dropped > 0 && <span className="tabular-nums text-gray-400">{counts.dropped} dropped</span>}
         {mismatched.length > 0 && (
           <span className="font-medium text-red-600 tabular-nums">{mismatched.length} wrong type</span>
+        )}
+        {duplicates.length > 0 && (
+          <span className="font-medium text-amber-600 tabular-nums">{duplicates.length} duplicate</span>
         )}
         <button
           onClick={async () => {
@@ -891,7 +940,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
             <Button
               variant="primary"
               onClick={save}
-              disabled={!!busy || rows.length === 0 || mismatched.length > 0}
+              disabled={!!busy || rows.length === 0 || mismatched.length > 0 || duplicates.length > 0}
               title={
                 mismatched.length > 0
                   ? `Row ${mismatched.map(m => m.i + 1).join(', ')} ${mismatched.length === 1 ? 'is' : 'are'} the wrong type for a ${thingType} pitch`

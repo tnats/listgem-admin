@@ -628,3 +628,40 @@ describe('builder — an unsaved build survives a reload', () => {
     expect(screen.queryByText('Persona (1966)')).toBeNull();
   });
 });
+
+describe('builder — the same item twice', () => {
+  const twice = [
+    { raw_text: 'Alien', thing_id: 'movie_alien_1979', status: 'resolved', candidates: [], match: { title: 'Alien', type: 'Movie', year: 1979 }, note: '', dropped: false, confidence: 1, reason: null },
+    { raw_text: 'Alien (1979)', thing_id: 'movie_alien_1979', status: 'resolved', candidates: [], match: { title: 'Alien', type: 'Movie', year: 1979 }, note: '', dropped: false, confidence: 1, reason: null },
+  ];
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.put.mockReset();
+    client.get.mockRejectedValue(new Error('no search'));
+    client.put.mockResolvedValue({ data: { success: true, item_count: 2 } });
+    sessionStorage.setItem('pitchDraft:p_dup', JSON.stringify({ v: 1, savedAt: Date.now(), rows: twice }));
+  });
+
+  it('names the repeat and refuses to save it', async () => {
+    renderWithProviders(<PitchBuilder pitchId="p_dup" thingType="Movie" items={[]} />);
+    expect(screen.getByText(/Row 2 is already on this list/i)).toBeTruthy();
+
+    // The `s` shortcut bypasses the disabled button, so guard the operation.
+    fireEvent.keyDown(window, { key: 's' });
+    await vi.waitFor(() => expect(screen.getByText(/Not saved — row 2 repeats an item/i)).toBeTruthy());
+    expect(client.put).not.toHaveBeenCalled();
+  });
+
+  it('drops the repeat and keeps the first, then saves', async () => {
+    renderWithProviders(<PitchBuilder pitchId="p_dup" thingType="Movie" items={[]} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Drop it$/i }));
+
+    expect(screen.queryByText(/already on this list/i)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /save items/i }));
+    await vi.waitFor(() => expect(client.put).toHaveBeenCalled());
+    const sent = client.put.mock.calls[0][1].items;
+    expect(sent).toHaveLength(1);
+    expect(sent[0].thing_id).toBe('movie_alien_1979');
+  });
+});

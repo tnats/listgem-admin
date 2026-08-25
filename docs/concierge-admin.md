@@ -142,7 +142,22 @@ reference columns. Column headings — a first row with no rank where every item
 dropped, struck through, and one `x` puts them back.
 
 Reference marks, currency amounts and footnote daggers are stripped per row regardless, since none of
-them is ever part of a title. When a resolve goes wrong, **Copy diagnostics** reports `search_title` and
+them is ever part of a title.
+
+### Duplicates
+
+Two checks, because they catch different things. Pasting again skips lines already on the list and says
+how many — a build survives a reload now, so a re-paste lands on rows that are still there. Separately,
+two rows that *resolved* to the same thing are reported by row number with a one-click drop, and block
+the save the way a type mismatch does. Only the resolved ids expose those; the text check cannot see
+them.
+
+### Ambiguous vs unresolved
+
+A server `no_match` that ships suggestions is reported **ambiguous** — "not confident, you pick" — and
+only a `no_match` with nothing to offer is unresolved. A suggestion is never adopted as the resolution
+whichever way it is labelled. Before this split, three films in a 40-row build read as failures with the
+correct match already sitting in their candidate lists. When a resolve goes wrong, **Copy diagnostics** reports `search_title` and
 `search_year` beside `raw_text`; if those two are identical the cleaner did nothing, which is the first
 thing to check.
 
