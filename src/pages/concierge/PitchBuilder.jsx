@@ -17,6 +17,7 @@ import {
   batchResults,
   chunkForBatch,
   normalizeCandidate,
+  normalizeParseOutcome,
   normalizeParsed,
   normalizeSearchResults,
   searchTitle,
@@ -268,8 +269,18 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     setBusy('parsing');
     setNote(null);
     let parsed = [];
+    let clipped = null;
     try {
-      parsed = normalizeParsed(await parse.mutateAsync(paste));
+      const outcome = normalizeParseOutcome(await parse.mutateAsync(paste));
+      parsed = outcome.candidates;
+      // The parser caps input and reports when it clipped. Losing that meant a
+      // long paste quietly lost its tail: a plausible list of rows, and no sign
+      // the last twenty never arrived.
+      if (outcome.truncated) {
+        clipped = outcome.maxInputChars
+          ? `Only the first ${outcome.maxInputChars.toLocaleString()} characters were parsed — the rest of your paste was cut. Split it and paste the remainder.`
+          : 'The parser cut your input short. Split it and paste the remainder.';
+      }
     } catch (err) {
       // No parser reachable — fall back to one row per non-empty line so the
       // operator can still build and resolve by hand.
@@ -288,6 +299,8 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     setBusy(null);
     const startAt = replace ? 0 : rows.length;
     await resolveIndices(fresh.map((_, i) => startAt + i), { source: next });
+    // After the resolve, so it isn't overwritten by the resolve's own note.
+    if (clipped) setNote({ ok: false, text: clipped });
   }
 
   /**

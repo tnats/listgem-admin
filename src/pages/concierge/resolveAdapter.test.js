@@ -4,6 +4,7 @@ import {
   applyBatchResults,
   batchResults,
   chunkForBatch,
+  normalizeParseOutcome,
   normalizeParsed,
   normalizeResolution,
   normalizeSearchResults,
@@ -391,5 +392,36 @@ describe('searchTitle — list decoration wrecks the match', () => {
     expect(toBatchPayload(rows, [0], 'Movie')).toEqual([{ type: 'Movie', title: 'Persona', year: 1966 }]);
     // The operator still sees what they pasted, and so does the target.
     expect(rows[0].raw_text).toBe('Persona (1966) 🇸🇪 8.6/10');
+  });
+});
+
+describe('normalizeParseOutcome — a clipped paste must not look complete', () => {
+  it('reports truncation and the cap', () => {
+    // /imports/parse caps input at max_input_chars and sets truncated when it
+    // clips. Dropping that left the operator with a plausible list of rows and
+    // no sign the tail never arrived.
+    const out = normalizeParseOutcome({
+      success: true,
+      candidates: [{ position: 0, raw_text: 'The Exorcist (1973)', inferred_type: null }],
+      candidate_count: 1,
+      method: 'structured',
+      truncated: true,
+      max_input_chars: 20000,
+    });
+    expect(out.truncated).toBe(true);
+    expect(out.maxInputChars).toBe(20000);
+    expect(out.method).toBe('structured');
+    expect(out.candidates).toHaveLength(1);
+  });
+
+  it('is quiet when nothing was clipped', () => {
+    const out = normalizeParseOutcome({ candidates: [], truncated: false, max_input_chars: 20000 });
+    expect(out.truncated).toBe(false);
+  });
+
+  it('treats a missing flag as not truncated, not as unknown', () => {
+    // A parser that says nothing has not said it clipped; don't invent a warning.
+    expect(normalizeParseOutcome({ candidates: [] }).truncated).toBe(false);
+    expect(normalizeParseOutcome(null).truncated).toBe(false);
   });
 });

@@ -79,6 +79,21 @@ export interface ParsedCandidate {
   inferred_type: string | null;
 }
 
+/**
+ * What the parse step reports beyond the candidates themselves.
+ *
+ * `/imports/parse` caps input at `max_input_chars` (20,000 in production) and
+ * sets `truncated` when it clips. Dropping that meant a long paste silently
+ * lost its tail: the operator sees a plausible list of rows and no indication
+ * that the last twenty never arrived.
+ */
+export interface ParseOutcome {
+  candidates: ParsedCandidate[];
+  truncated: boolean;
+  maxInputChars: number | null;
+  method: string | null;
+}
+
 /** POST /resolve and each element of /resolve/batch's `candidates`. */
 export interface ResolveRequest {
   type: string;
@@ -250,6 +265,7 @@ export function normalizeResolution(raw: unknown): Resolution {
 }
 
 /** Ordered candidates out of POST /imports/parse — `{ position, raw_text }`. */
+/** The candidates alone, for callers that don't care how the parse went. */
 export function normalizeParsed(data: unknown): ParsedCandidate[] {
   const list = isObject(data) && Array.isArray(data.items)
     ? data.items
@@ -268,6 +284,17 @@ export function normalizeParsed(data: unknown): ParsedCandidate[] {
     })
     .filter(c => c.raw_text.trim())
     .sort((a, b) => a.position - b.position);
+}
+
+/** The candidates plus whether the input was clipped on the way in. */
+export function normalizeParseOutcome(data: unknown): ParseOutcome {
+  const d = isObject(data) ? data : {};
+  return {
+    candidates: normalizeParsed(data),
+    truncated: d.truncated === true,
+    maxInputChars: typeof d.max_input_chars === 'number' ? d.max_input_chars : null,
+    method: firstString(d.method),
+  };
 }
 
 /**
