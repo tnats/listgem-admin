@@ -11,6 +11,7 @@ import {
 } from '../../api/hooks';
 import { apiErrorMessage } from '../../api/errors';
 import { typeMatchesPitch } from './pitchRules';
+import { diagnosticsText } from './diagnostics';
 import {
   ROW_STATUS,
   applyBatchResults,
@@ -789,7 +790,23 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         {mismatched.length > 0 && (
           <span className="font-medium text-red-600 tabular-nums">{mismatched.length} wrong type</span>
         )}
-        <div className="ml-auto flex items-center gap-1.5 text-[11px] text-gray-400">
+        <button
+          onClick={async () => {
+            const text = diagnosticsText({ pitchId, thingType, rows, counts });
+            try {
+              await navigator.clipboard.writeText(text);
+              setNote({ ok: true, text: `Diagnostics copied — ${rows.length} row(s) and the recent API calls. No contact details included.` });
+            } catch {
+              // Clipboard can be refused; the console is always available.
+              console.log(text);
+              setNote({ ok: false, text: 'Clipboard refused — the diagnostics are in the browser console instead.' });
+            }
+          }}
+          className="ml-auto text-[11px] text-gray-400 underline decoration-dotted underline-offset-2 hover:text-gray-600"
+        >
+          Copy diagnostics
+        </button>
+        <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
           <span>
             j/k row<Kbd>↑↓</Kbd>
           </span>
