@@ -20,7 +20,15 @@
 // `suggestions` is the alternates list — on a `no_match` it is what the operator
 // picks from, so it must never be auto-adopted as the resolution.
 
-export const BATCH_LIMIT = 200; // one rate-limit unit per call
+/**
+ * Rows per /resolve/batch call — one rate-limit unit each.
+ *
+ * 100, not the 200 the endpoint allows: measured against prod, a batch costs
+ * ~0.25s an item (41 items 10.7s, 82 items 20.2s), so a full 200 would run ~49s
+ * into the server's 60s deadline and time out the whole chunk on any bad day.
+ * Halving it costs one extra unit per 100 items and takes that off the table.
+ */
+export const BATCH_LIMIT = 100;
 
 export type RowStatus = 'resolved' | 'ambiguous' | 'unresolved' | 'pending';
 
@@ -250,7 +258,14 @@ export function normalizeResolution(raw: unknown): Resolution {
   const thingId = explicitId || (!mapped && candidates.length === 1 ? candidates[0].thing_id : null);
 
   let status: RowStatus;
-  if (mapped) status = mapped;
+  // A `no_match` carrying suggestions is not a dead end — it is the server
+  // saying "not confident, you pick". Reported as unresolved it read as "this
+  // does not exist", and the operator had no reason to open the row: in a
+  // 40-row build, Hannibal and two Resident Evils sat there as failures with
+  // the right film already in hand. The thing_id stays null either way; this
+  // changes what we call it, never what we adopt.
+  if (mapped === 'unresolved' && !thingId && candidates.length > 0) status = 'ambiguous';
+  else if (mapped) status = mapped;
   else if (thingId) status = 'resolved';
   else status = candidates.length > 1 ? 'ambiguous' : 'unresolved';
   // A row with no thing_id is never "resolved", whatever the server called it.
@@ -528,6 +543,52 @@ export function toItemsPayload(rows: BuilderRow[]): ItemPayload[] {
       resolution_status: row.thing_id ? 'resolved' : 'ambiguous',
       note: row.note?.trim() ? row.note.trim() : null,
     }));
+}
+
+/** Same pasted line twice — the key that survives a re-paste of the same list. */
+function textKey(row: Pick<BuilderRow, 'raw_text'>): string {
+  return (row.raw_text || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Incoming rows minus the ones already on the board.
+ *
+ * Appending a second paste of the same list produced 82 rows for a 40-film
+ * list, half of them stale copies resolved from the older, noisier titles.
+ * Nothing downstream would have caught it: a list can legitimately be built by
+ * appending, so quantity is no signal.
+ */
+export function dedupeAgainst(
+  existing: BuilderRow[],
+  incoming: BuilderRow[],
+): { rows: BuilderRow[]; skipped: number } {
+  const seen = new Set(existing.filter(r => !r.dropped).map(textKey));
+  const rows: BuilderRow[] = [];
+  for (const row of incoming) {
+    const k = textKey(row);
+    // Blank lines can't collide with each other in any meaningful way.
+    if (k && seen.has(k)) continue;
+    if (k) seen.add(k);
+    rows.push(row);
+  }
+  return { rows, skipped: incoming.length - rows.length };
+}
+
+/**
+ * Kept rows that resolved to the same thing, beyond the first of each.
+ *
+ * The text-level check can't see these: two different lines ("Alien" and
+ * "Alien (1979)") resolving to one film is the same item twice on the list.
+ */
+export function duplicateIndices(rows: BuilderRow[]): number[] {
+  const first = new Map<string, number>();
+  const dupes: number[] = [];
+  rows.forEach((row, i) => {
+    if (row.dropped || !row.thing_id) return;
+    if (first.has(row.thing_id)) dupes.push(i);
+    else first.set(row.thing_id, i);
+  });
+  return dupes;
 }
 
 /** Counts for the builder's summary strip. */
