@@ -24,7 +24,7 @@ const INHERITED = [
   { key: 'proposed_description', label: 'Proposed description', multiline: true },
   { key: 'category', label: 'Category', hint: 'Free text. Copied onto their list.' },
   { key: 'source_url', label: 'Source URL', hint: "The exact page you're rebuilding." },
-  { key: 'source_attribution', label: 'Source attribution', hint: 'Credit line on their list.' },
+  { key: 'source_attribution', label: 'Source attribution', hint: 'Reads “Compiled from …” on the preview. A name, not shorthand.' },
 ];
 
 const FIELDS = [...INTERNAL, ...INHERITED, { key: 'assigned_to', label: 'Assigned to' }];
@@ -112,7 +112,7 @@ export default function EditDetailsModal({ open, pitch, onClose, onSaved }) {
 
       <Section
         title="The list they'll receive"
-        note="Copied into their account when they claim the draft — write it for them, not for us."
+        note="On the preview page from the moment tokens are issued, and copied into their account when they claim. The preview link is public and forwardable — write these for them, not for us."
       />
       {INHERITED.map(renderField)}
     </Modal>

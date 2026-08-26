@@ -28,6 +28,25 @@ function typeOptions(live) {
   return { options, offline: false };
 }
 
+/**
+ * Marks a field whose value is rendered on the public preview page.
+ *
+ * Every one of these reaches anyone the preview link is forwarded to. It was
+ * not visible from the form: a source attribution typed as "ew" — shorthand
+ * for the operator, a credit line to the target — went out reading
+ * "Compiled from ew."
+ */
+function Public() {
+  return (
+    <span
+      className="ml-1 rounded bg-indigo-50 px-1 py-0.5 align-middle text-[10px] font-medium text-indigo-700"
+      title="Rendered on the preview page the target sees"
+    >
+      target sees this
+    </span>
+  );
+}
+
 const EMPTY = {
   target_name: '',
   target_org: '',
@@ -114,7 +133,7 @@ export default function IntakeModal({ open, onClose, onCreated }) {
 
       <div className="grid grid-cols-2 gap-x-4">
         <Field
-          label="Target name"
+          label={<>Target name<Public /></>}
           required
           error={show('target_name')}
           hint="The person or organisation, not the list."
@@ -127,7 +146,7 @@ export default function IntakeModal({ open, onClose, onCreated }) {
             placeholder="e.g. Ava Lindqvist"
           />
         </Field>
-        <Field label="Organisation" hint="Where they do this, if relevant." htmlFor="target_org">
+        <Field label={<>Organisation<Public /></>} hint="Where they do this, if relevant." htmlFor="target_org">
           <TextInput
             id="target_org"
             value={form.target_org}
@@ -169,7 +188,7 @@ export default function IntakeModal({ open, onClose, onCreated }) {
       />
 
       <Field
-        label="Proposed title"
+        label={<>Proposed title<Public /></>}
         required
         error={show('proposed_title')}
         hint="The list's name, as they'll see it."
@@ -183,7 +202,7 @@ export default function IntakeModal({ open, onClose, onCreated }) {
         />
       </Field>
 
-      <Field label="Proposed description" hint="Optional. Sits under the title." htmlFor="proposed_description">
+      <Field label={<>Proposed description<Public /></>} hint="Optional. Sits under the title." htmlFor="proposed_description">
         <TextArea
           id="proposed_description"
           rows={2}
@@ -216,7 +235,7 @@ export default function IntakeModal({ open, onClose, onCreated }) {
             </p>
           )}
         </Field>
-        <Field label="Category" hint="Free text. Copied onto their list." htmlFor="category">
+        <Field label={<>Category<Public /></>} hint="Free text. Copied onto their list." htmlFor="category">
           <TextInput
             id="category"
             value={form.category}
@@ -228,7 +247,7 @@ export default function IntakeModal({ open, onClose, onCreated }) {
 
       <div className="grid grid-cols-2 gap-x-4">
         <Field
-          label="Source URL"
+          label={<>Source URL<Public /></>}
           hint="The exact page you're rebuilding — not the site's home page."
           htmlFor="source_url"
         >
@@ -240,8 +259,8 @@ export default function IntakeModal({ open, onClose, onCreated }) {
           />
         </Field>
         <Field
-          label="Source attribution"
-          hint="Credit line on their list. Points traffic back to them — part of the pitch."
+          label={<>Source attribution<Public /></>}
+          hint="Credit line as it will read: “Compiled from …”. Write it as the source would — a name, not shorthand."
           htmlFor="source_attribution"
         >
           <TextInput

@@ -122,3 +122,31 @@ describe('assignee picker', () => {
     expect(document.querySelector('input#assigned_to')).toBeNull();
   });
 });
+
+describe('intake — which fields the target can read', () => {
+  it('marks every field that reaches the public preview', () => {
+    // The preview link is public and forwardable, so these are not internal
+    // notes-to-self. A source attribution typed as shorthand went out to a
+    // target reading "Compiled from ew."
+    renderWithProviders(<IntakeModal open onClose={() => {}} />);
+    const marks = screen.getAllByText(/target sees this/i);
+    expect(marks).toHaveLength(7);
+
+    for (const label of [
+      /Target name/, /Organisation/, /Proposed title/, /Proposed description/,
+      /Category/, /Source URL/, /Source attribution/,
+    ]) {
+      expect(screen.getByText(label).textContent).toMatch(/target sees this/i);
+    }
+  });
+
+  it('leaves the internal-only fields unmarked', () => {
+    // Contact, owner and notes stay out of the preview payload; marking them
+    // would make the marker meaningless.
+    renderWithProviders(<IntakeModal open onClose={() => {}} />);
+    for (const label of [/^Contact/, /^Assigned to/, /^Notes/]) {
+      const el = screen.queryByText(label);
+      if (el) expect(el.textContent).not.toMatch(/target sees this/i);
+    }
+  });
+});
