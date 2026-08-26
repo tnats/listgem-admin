@@ -191,6 +191,27 @@ correct match already sitting in their candidate lists. When a resolve goes wron
 `search_year` beside `raw_text`; if those two are identical the cleaner did nothing, which is the first
 thing to check.
 
+## The guide rail
+
+`pitchFlow.ts` resolves the pitch into an ordered list of steps — details, build, links, mark pitched,
+send, they claim, confirm identity — each `done` / `current` / `blocked` / `waiting` / `todo`, derived
+from server state only. `PitchFlowRail` renders it above the tabs and leaves them alone: it helps someone
+who doesn't know the sequence without slowing down someone who does.
+
+Three rules hold it together, and each exists because of a specific failure:
+
+- **Exactly one step is live.** A rail that answers "what now" with two answers is not a rail. Pinned by
+  a test that sweeps the realistic states.
+- **`done` needs server evidence.** The build step reads `item_count`/`resolved_count`, so a builder full
+  of unsaved rows does not tick it. Nothing records that an invite was *sent*, so that step ticks on the
+  claim rather than pretending to know.
+- **`waiting` needs evidence the ball is with them.** `pitched` only means we marked it pitched; calling
+  that "waiting on them" would excuse an outreach nobody made. `accepted` is the target answering, so the
+  wait is real.
+
+Adding a step means adding it to `pitchFlow` and its test — not to a component. The resolver is pure for
+the same reason `pitchRules` is: the sequence gets pinned by tests instead of by clicking through prod.
+
 ## Issuing tokens on a draft
 
 Minting the token pair and the invite *working* are different questions. A preview on a draft is worth

@@ -211,3 +211,44 @@ describe('pitch detail — an expired invite is a lapsed TTL', () => {
     expect(screen.queryByText(/30-day invite has lapsed/i)).toBeNull();
   });
 });
+
+describe('pitch detail — the guide rail', () => {
+  it('names the next move and performs it, on the pitch that shipped a dead invite', async () => {
+    // Draft, list saved, tokens minted: the exact state in which an invite was
+    // sent and the target's screen reported the refusal.
+    serve({
+      ...BASE,
+      status: 'draft',
+      item_count: 40,
+      resolved_count: 40,
+      preview_token: 'ptok',
+      invite_token: 'itok',
+    });
+    client.post.mockResolvedValue({ data: { success: true } });
+    renderDetail();
+
+    await vi.waitFor(() => expect(screen.getByText(/Next: Mark as pitched/i)).toBeTruthy());
+    expect(screen.getByText(/draft cannot be claimed/i)).toBeTruthy();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /^Mark as pitched$/i })[0]);
+    await vi.waitFor(() => expect(client.post).toHaveBeenCalled());
+    expect(client.post.mock.calls[0][0]).toBe('/pitches/p_1/status');
+    expect(client.post.mock.calls[0][1]).toMatchObject({ status: 'pitched' });
+  });
+
+  it('sends you to the builder when the list is the thing that is missing', async () => {
+    serve({ ...BASE, status: 'draft', item_count: 0, resolved_count: 0 });
+    renderDetail();
+
+    await vi.waitFor(() => expect(screen.getByText(/Next: Build the list/i)).toBeTruthy());
+    expect(screen.getByText(/Nothing saved yet/i)).toBeTruthy();
+  });
+
+  it('offers no next move on a pitch that has ended', async () => {
+    serve({ ...BASE, status: 'archived' });
+    renderDetail();
+
+    await vi.waitFor(() => expect(screen.getAllByText(/taken down/i).length).toBeGreaterThan(0));
+    expect(screen.queryByText(/^Next:/i)).toBeNull();
+  });
+});
