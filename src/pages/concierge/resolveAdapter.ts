@@ -47,8 +47,10 @@ export interface Candidate {
   score: number | null;
   /**
    * False for a federated hit that exists in TMDB/Spotify/Books but not in our
-   * registry. Those carry no thing_id and cannot be attached to a pitch until
-   * there's a way to materialise a Thing without a list (listgem-platform#550).
+   * registry. Those carry no thing_id, and picking one materialises it through
+   * POST /things/resolve-or-create before attaching (listgem-platform#550,
+   * shipped) — so attaching is not evidence the registry already held it. The
+   * builder reports which of the two happened; believe that, not the outcome.
    */
   in_registry: boolean;
   /** 'local' for a registry hit, otherwise the external source that found it. */
@@ -577,6 +579,9 @@ export function dedupeAgainst(
   return { rows, skipped: incoming.length - rows.length };
 }
 
+/** Years of drift between a source line and a match that mean nothing. */
+const YEAR_TOLERANCE = 2;
+
 /** Reduce a title to what a comparison should care about. */
 function compareKey(title: string): string {
   return (title || '')
@@ -612,9 +617,11 @@ export function matchConcern(row: BuilderRow): string | null {
   }
 
   const gotYear = Number(row.match.year);
-  // One year of drift is ordinary between a table and a registry; a decade is
-  // a different film.
-  if (asked.year && Number.isFinite(gotYear) && Math.abs(asked.year - gotYear) > 1) {
+  // Two years, matching the window the server's suggestion filter now keeps
+  // (listgem-platform#564). Release dates vary by region and a registry can
+  // date a film by its festival run; a decade is a different film. Disagreeing
+  // with the server here would only flag matches it has already judged fine.
+  if (asked.year && Number.isFinite(gotYear) && Math.abs(asked.year - gotYear) > YEAR_TOLERANCE) {
     reasons.push(`the line says ${asked.year}, the match is ${gotYear}`);
   }
 
