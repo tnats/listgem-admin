@@ -215,6 +215,22 @@ Three rules hold it together, and each exists because of a specific failure:
 Adding a step means adding it to `pitchFlow` and its test — not to a component. The resolver is pure for
 the same reason `pitchRules` is: the sequence gets pinned by tests instead of by clicking through prod.
 
+## display_text — the line a target may be shown
+
+`PUT /pitches/:id/items` carries `display_text` per item alongside `raw_text` (listgem-platform#565,
+#567). `raw_text` is operator notation and stays that way — it is the provenance record and the builder
+shows it. `display_text` is the title we actually searched on, i.e. `queryFor(row).title`, or `null` when
+there is nothing to show.
+
+It matters because an unresolved row reaches the target. After a claim, skipped items appear as chips in
+the leftovers flow — the same component a user meets after their own import — so a pasted table row would
+otherwise read to them as `22 Resident Evil: The Final Chapter 2017 $314,101,190 [43][44]`.
+
+The server deliberately has **no fallback to `raw_text` and no heuristic stripping**: guessing at someone
+else's formatting fails silently, and a title mangled into something plausible is worse than notation
+that is visibly notation. Which is why the write side is ours — we hold the cleaned title already, and
+reverse-engineering it server-side would be a guess.
+
 ## Which link to send, and in what order
 
 **Preview first, then the invite.** They are not alternatives:

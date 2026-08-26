@@ -119,6 +119,21 @@ export interface ItemPayload {
   thing_id: string | null;
   resolution_status: 'resolved' | 'ambiguous';
   note: string | null;
+  /**
+   * A line safe to show the target (listgem-platform#565).
+   *
+   * `raw_text` is operator notation — a pasted table row still carrying its
+   * rank, box office and reference marks, or a curator's
+   * "… (1971, 1972) 🇸🇪 8.6/10". A row that never resolved reaches the target
+   * anyway, as a chip in the leftovers flow after they claim, and that surface
+   * has no business showing our working notes.
+   *
+   * This is the title we actually searched on, so it is derived, never guessed:
+   * the server deliberately does not fall back to `raw_text` or strip it by
+   * regex, because mangling someone's formatting fails silently and a
+   * plausible-but-wrong title is worse than one that is visibly notation.
+   */
+  display_text: string | null;
 }
 
 export interface RowCounts {
@@ -547,6 +562,10 @@ export function toItemsPayload(rows: BuilderRow[]): ItemPayload[] {
       thing_id: row.thing_id || null,
       resolution_status: row.thing_id ? 'resolved' : 'ambiguous',
       note: row.note?.trim() ? row.note.trim() : null,
+      // Null rather than an empty string when there is nothing to show: the
+      // server treats null as "no display line", and an unlabelled chip beats
+      // a blank one.
+      display_text: queryFor(row).title.trim() || null,
     }));
 }
 

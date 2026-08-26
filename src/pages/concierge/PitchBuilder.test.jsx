@@ -718,3 +718,34 @@ describe('builder — discarding a build', () => {
     expect(screen.queryByRole('button', { name: /discard build/i })).toBeNull();
   });
 });
+
+describe('builder — the display line reaches the request', () => {
+  beforeEach(() => {
+    client.get.mockReset();
+    client.put.mockReset();
+    client.get.mockRejectedValue(new Error('no search'));
+    client.put.mockResolvedValue({ data: { success: true, item_count: 2 } });
+  });
+
+  it('puts display_text on the wire, not merely in the payload builder', async () => {
+    // A value that never arrives is the failure shape this guards: the pure
+    // function can be right while nothing reaches the request.
+    sessionStorage.setItem('pitchDraft:p_dt', JSON.stringify({
+      v: 1,
+      savedAt: Date.now(),
+      rows: [
+        { raw_text: '22 Resident Evil: The Final Chapter 2017 $314,101,190 [43][44]', thing_id: null, status: 'unresolved', candidates: [], match: null, note: '', dropped: false, confidence: null, reason: null, query: { title: 'Resident Evil: The Final Chapter', year: 2017, header: false } },
+        { raw_text: 'Persona (1966) 🇸🇪 8.6/10', thing_id: 'movie_persona_1966', status: 'resolved', candidates: [], match: { title: 'Persona', type: 'Movie', year: 1966 }, note: '', dropped: false, confidence: 1, reason: null },
+      ],
+    }));
+    renderWithProviders(<PitchBuilder pitchId="p_dt" thingType="Movie" items={[]} />);
+    fireEvent.click(screen.getByRole('button', { name: /save items/i }));
+
+    await vi.waitFor(() => expect(client.put).toHaveBeenCalled());
+    const sent = client.put.mock.calls[0][1].items;
+    expect(sent.map(i => i.display_text)).toEqual(['Resident Evil: The Final Chapter', 'Persona']);
+    // The unresolved row is the one that can reach the target as a chip.
+    expect(sent[0].resolution_status).toBe('ambiguous');
+    expect(sent[0].raw_text).toMatch(/\$314,101,190/);
+  });
+});
