@@ -1237,12 +1237,33 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                   </Button>
                 </div>
               )}
-              <TextInput
-                className="mt-2"
-                value={focusedRow.note || ''}
-                onChange={e => patchRow(focus, { note: e.target.value })}
-                placeholder="Note for this row (internal)"
-              />
+              {/* Not internal, whatever it used to say. Provisioning copies this
+                  straight into list_items.note, so it is rendered on the
+                  target's own list and published with it. A staff note written
+                  here reached a claimed list reading "[#553: cleared a TVSeries
+                  mismatch on a Movie pitch; re-resolve to Bergman's Persona
+                  (1966)]". Internal working notes belong on the pitch, under
+                  Edit details. */}
+              <div className="mt-2">
+                <label
+                  htmlFor="row_note"
+                  className="mb-1 block text-[11px] font-medium text-gray-500"
+                >
+                  Note on this item
+                  <span
+                    className="ml-1 rounded bg-indigo-50 px-1 py-0.5 align-middle text-[10px] font-medium text-indigo-700"
+                    title="Copied onto their list when they claim the draft, and published with it"
+                  >
+                    target sees this
+                  </span>
+                </label>
+                <TextInput
+                  id="row_note"
+                  value={focusedRow.note || ''}
+                  onChange={e => patchRow(focus, { note: e.target.value })}
+                  placeholder="A line about this pick, in their voice — not a working note"
+                />
+              </div>
               <div className="mt-2 text-[11px] text-gray-400">
                 Resolving as <span className="font-medium text-gray-500">{thingType}</span>
                 {focusedRow.reason && <> · server said <span className="text-gray-500">{focusedRow.reason}</span></>}

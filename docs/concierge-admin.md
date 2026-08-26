@@ -268,6 +268,20 @@ The thumbnail box is rendered whether or not there is an image. Hiding a failed 
 when a whole source can fail at once: a hotlink-blocked list would degrade into something that looks
 deliberately text-only, and nobody reports what they cannot see.
 
+## The item note is not internal
+
+`PitchBuilder`'s per-row note is copied verbatim into `list_items.note` at provisioning and rendered on
+the target's own list — and published with it if they publish. The field's placeholder said
+**"Note for this row (internal)"**, which is the opposite of true, and a staff note written under that
+promise reached a claimed list as *"[#553: cleared a TVSeries mismatch on a Movie pitch; re-resolve to
+Bergman's Persona (1966)]"*, italicised under Persona.
+
+It now carries the same **target sees this** marker as the intake fields. Internal working notes belong
+on the pitch itself, under Edit details — `pitch_lists.notes` is staff-only and is not copied anywhere.
+
+Worth checking existing pitches for notes written while the label was wrong; provisioning will carry them
+across.
+
 ## Two item counts that are both right
 
 The admin and the invite page count different things, and neither is wrong:
