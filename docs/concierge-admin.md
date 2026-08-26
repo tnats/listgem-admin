@@ -231,6 +231,24 @@ else's formatting fails silently, and a title mangled into something plausible i
 that is visibly notation. Which is why the write side is ours — we hold the cleaned title already, and
 reverse-engineering it server-side would be a guess.
 
+## Two item counts that are both right
+
+The admin and the invite page count different things, and neither is wrong:
+
+| | Counts | Where |
+|---|---|---|
+| `itemCounts()` | rows on the pitch, resolved or not | rail, page header |
+| invite `item_count` | what will actually land — **resolved and deduplicated** | the target's invite page |
+
+A pitch of 11 rows with one unresolved reports **11** here and **10** there. Do not wire one to the
+other, and do not "fix" a mismatch between them: the operator needs to know what is on the pitch, and the
+target needs to know what they will receive. Flagged by the backend session, whose comment on the field
+reads as "holds" rather than "lands" — the number is right for its surface and the name invites the
+confusion.
+
+That the server deduplicates at provisioning is also why the builder's duplicate block matters: without
+it, two rows pointing at one film promise a count the claim quietly does not deliver.
+
 ## Which link to send, and in what order
 
 **Preview first, then the invite.** They are not alternatives:
