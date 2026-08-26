@@ -11,6 +11,7 @@ import {
   useSearchToAdd,
 } from '../../api/hooks';
 import { apiErrorMessage } from '../../api/errors';
+import { imageUrl } from '../../api/imageUrl';
 import { typeMatchesPitch } from './pitchRules';
 import { diagnosticsText } from './diagnostics';
 import { clearDraft, readDraft, saveDraft } from './draftStore';
@@ -62,6 +63,32 @@ function Kbd({ children }) {
   );
 }
 
+/**
+ * Cover art for a candidate.
+ *
+ * The box is always there, filled or not. Hiding a failed image is the wrong
+ * default when a whole source can fail at once: a hotlink-blocking host would
+ * degrade to a row that looks deliberately text-only, and nobody reports what
+ * they cannot see.
+ */
+function Thumb({ candidate }) {
+  const src = imageUrl(candidate.image_url);
+  const [broken, setBroken] = useState(false);
+  return (
+    <span className="h-9 w-6 shrink-0 overflow-hidden rounded-sm bg-gray-100">
+      {src && !broken && (
+        <img
+          src={src}
+          alt=""
+          loading="lazy"
+          onError={() => setBroken(true)}
+          className="h-full w-full object-cover"
+        />
+      )}
+    </span>
+  );
+}
+
 function CandidateRow({ candidate, chosen, onPick, busy, wrongType }) {
   // A federated hit with no thing_id isn't in our registry yet. Picking it now
   // materialises it through the same kernel path a user add uses
@@ -79,7 +106,7 @@ function CandidateRow({ candidate, chosen, onPick, busy, wrongType }) {
             ? `Not in the registry yet — adds it from ${candidate.source || 'the source'}, then attaches`
             : undefined
       }
-      className={`flex w-full items-baseline gap-2 rounded border px-2 py-1 text-left text-xs disabled:opacity-50 ${
+      className={`flex w-full items-center gap-2 rounded border px-2 py-1 text-left text-xs disabled:opacity-50 ${
         wrongType
           ? 'cursor-not-allowed border-gray-200 text-gray-400 line-through decoration-gray-300'
           : needsCreate
@@ -89,6 +116,7 @@ function CandidateRow({ candidate, chosen, onPick, busy, wrongType }) {
             : 'border-gray-200 hover:bg-gray-50'
       }`}
     >
+      <Thumb candidate={candidate} />
       <span className="min-w-0 flex-1 truncate text-gray-800">{candidate.title}</span>
       {candidate.creator && <span className="truncate text-gray-500">{candidate.creator}</span>}
       {candidate.type && <span className="text-gray-400">{candidate.type}</span>}

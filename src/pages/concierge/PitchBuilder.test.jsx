@@ -749,3 +749,46 @@ describe('builder — the display line reaches the request', () => {
     expect(sent[0].raw_text).toMatch(/\$314,101,190/);
   });
 });
+
+describe('builder — cover art on the candidates', () => {
+  const ambiguous = [{
+    raw_text: '16 Hannibal 2001 $351,692,268 [31][32]',
+    thing_id: null, status: 'ambiguous', note: '', dropped: false, confidence: null,
+    reason: 'no_confident_match', match: null,
+    candidates: [
+      { thing_id: 'movie_hannibal_2001', title: 'Hannibal', type: 'Movie', year: 2001, image_url: 'https://image.tmdb.org/t/p/w200/h.jpg', in_registry: true, source: 'local', creator: null, score: 0.7, source_type: null, source_id: null },
+      { thing_id: 'place_x', title: "Hannibal's Kitchen", type: 'Place', year: null, image_url: 'https://s3-media0.fl.yelpcdn.com/bphoto/x/o.jpg', in_registry: true, source: 'local', creator: null, score: 0.4, source_type: null, source_id: null },
+      { thing_id: 'movie_no_art', title: 'Hannibal Rising', type: 'Movie', year: 2007, image_url: null, in_registry: true, source: 'local', creator: null, score: 0.3, source_type: null, source_id: null },
+    ],
+  }];
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.get.mockRejectedValue(new Error('no search'));
+    sessionStorage.setItem('pitchDraft:p_art', JSON.stringify({ v: 1, savedAt: Date.now(), rows: ambiguous }));
+  });
+
+  it('shows the art, so two films with one title are told apart on sight', () => {
+    // The mis-pick this exists for: Hannibal (2001) resolved to The Silence of
+    // the Lambs, chosen from a candidate list of title, year and type alone.
+    renderWithProviders(<PitchBuilder pitchId="p_art" thingType="Movie" items={[]} />);
+    const art = screen.getAllByRole('presentation', { hidden: true });
+    expect(art.length).toBeGreaterThan(0);
+    expect(art[0].getAttribute('src')).toBe('https://image.tmdb.org/t/p/w200/h.jpg');
+  });
+
+  it('routes a hotlink-blocking source through the proxy', () => {
+    renderWithProviders(<PitchBuilder pitchId="p_art" thingType="Movie" items={[]} />);
+    const srcs = screen.getAllByRole('presentation', { hidden: true }).map(i => i.getAttribute('src'));
+    expect(srcs.some(s => s?.includes('/images/proxy?url='))).toBe(true);
+  });
+
+  it('keeps the box when there is no art, so the rows stay aligned', () => {
+    // A candidate with no image must not shift its title out of line with the
+    // others — and a whole source failing must look like empty boxes, not like
+    // a list that was always text.
+    renderWithProviders(<PitchBuilder pitchId="p_art" thingType="Movie" items={[]} />);
+    expect(screen.getByText('Hannibal Rising')).toBeTruthy();
+    expect(screen.getAllByRole('presentation', { hidden: true })).toHaveLength(2);
+  });
+});
