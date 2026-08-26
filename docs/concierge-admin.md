@@ -191,6 +191,20 @@ correct match already sitting in their candidate lists. When a resolve goes wron
 `search_year` beside `raw_text`; if those two are identical the cleaner did nothing, which is the first
 thing to check.
 
+## What the preview link exposes
+
+`GET /pitches/preview/:token` is public and unauthenticated, and the link is forwardable, so its payload
+is readable by anyone who ends up holding it. Verified against prod on 2026-08-25: no contact details, no
+tokens, no `assigned_to`, no notes, no pitch status, and nothing resembling `verified_method`.
+
+What it *does* carry is every inherited field — `target_name`, `target_org`, the proposed title and
+description, `category`, `source_url` and `source_attribution` — plus each item's `raw_text`. Both intake
+and edit mark these as target-visible, because nothing else in the form said so: an attribution typed as
+`ew`, shorthand while entering a pitch, rendered to the target as “Compiled from ew.”
+
+`raw_text` staying in the payload is worth knowing when pasting from a table — the page renders resolved
+titles, but the pasted line (box-office columns, reference marks and all) is in the response behind it.
+
 ## Verifying against prod
 
 Prod is the only environment, and this feature writes **real people's contact details**. Anything created
