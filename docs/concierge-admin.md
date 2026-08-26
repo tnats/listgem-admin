@@ -168,12 +168,15 @@ not choose.
 ### Matches worth a second look
 
 `matchConcern()` flags a resolved row whose match agrees with nothing on the line it came from: a title
-sharing no word of three letters or more, or a year more than one out. It blocks nothing — a real match
+sharing no word of three letters or more, or a year more than two out. Two years is deliberately the same
+window the server's suggestion filter keeps (listgem-platform#564) — flagging inside it would only
+contradict a judgement the server has already made. It blocks nothing — a real match
 often shifts a year between a box-office table and the registry — but it colours the cell amber and lists
 the row above the table.
 
 It exists because the matcher offered *The Silence of the Lambs* (1991) as its **only** suggestion for
-`Hannibal` (2001), and a single suggestion presented alone reads as the answer. Both disagreements were
+`Hannibal` (2001), and a single suggestion presented alone reads as the answer. The registry did not hold
+Hannibal at the time; `no_confident_match` was the right verdict, and only the suggestion was wrong. Both disagreements were
 already in the row. Verified against every resolved row of the 40-film build: one flag, no false ones.
 
 ### Ambiguous vs unresolved

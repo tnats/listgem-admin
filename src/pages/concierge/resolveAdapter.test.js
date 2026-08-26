@@ -652,9 +652,20 @@ describe('matchConcern — a match that agrees with nothing', () => {
     expect(why).toMatch(/2001.*1991/);
   });
 
-  it('accepts a year of drift between a table and the registry', () => {
+  it('accepts the drift the server itself tolerates', () => {
     // Real match from the same run: the table dates it 2020, the registry 2021.
-    expect(matchConcern(matched('26 A Quiet Place Part II 2020 $297,372,261 [51][52]', 'A Quiet Place Part II', 2021))).toBeNull();
+    const row = '26 A Quiet Place Part II 2020 $297,372,261 [51][52]';
+    expect(matchConcern(matched(row, 'A Quiet Place Part II', 2021))).toBeNull();
+    // Two years is the window the server's suggestion filter keeps
+    // (listgem-platform#564); flagging inside it would only contradict it.
+    expect(matchConcern(matched(row, 'A Quiet Place Part II', 2022))).toBeNull();
+    expect(matchConcern(matched(row, 'A Quiet Place Part II', 2018))).toBeNull();
+  });
+
+  it('still catches the gap a franchise sibling opens', () => {
+    // 15 years, the Resident Evil mis-pick; 10, the Hannibal one.
+    expect(matchConcern(matched('26 A Quiet Place Part II 2020 $297,372,261 [51][52]', 'A Quiet Place', 2023)))
+      .toMatch(/2020.*2023/);
   });
 
   it('accepts a sequel or a re-pointed title that still shares the name', () => {
