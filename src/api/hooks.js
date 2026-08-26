@@ -430,7 +430,13 @@ export function usePitchMutations(defaultPitchId) {
     confirmIdentity: useMutation({
       mutationFn: ({ pitchId, ...body }) =>
         client.post(`/pitches/${pitchId || defaultPitchId}/confirm-identity`, body).then(r => r.data),
-      onSuccess: invalidate,
+      // The grant lands on the *user*, not the pitch, so the verification
+      // queries have to be dropped too — the pitch page reads the badge from
+      // there, and invalidating only pitches left a stale "not confirmed".
+      onSuccess: () => {
+        invalidate();
+        qc.invalidateQueries({ queryKey: ['verification'] });
+      },
     }),
   };
 }

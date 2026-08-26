@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import { Button } from '../../components/Form';
 import VerifiedBadge from '../../components/VerifiedBadge';
-import { usePitch, usePitchMutations } from '../../api/hooks';
+import { usePitch, usePitchMutations, useVerificationHistory } from '../../api/hooks';
 import { apiErrorMessage } from '../../api/errors';
 import {
   STATUS_LABEL,
@@ -61,7 +61,18 @@ export default function PitchDetailPage() {
   const [identityOpen, setIdentityOpen] = useState(false);
   const [takedownOpen, setTakedownOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [confirmed, setConfirmed] = useState(null);
+  // Read from the server, never from what this session happens to remember.
+  // Held locally, the badge vanished on refresh: the grant was real, the page
+  // just had no idea. Deliberately no mock fallback — inventing a confirmation
+  // is worse than showing none, and this one grants a badge.
+  // Live data only. `data` below falls back to a sample pitch, and asking the
+  // verification API about an invented user id would be a fabricated answer to
+  // a question about whether someone is verified.
+  const provisionedUserId = query.data?.pitch?.provisioned_user_id || null;
+  const verification = useVerificationHistory(provisionedUserId);
+  const confirmed = verification.data?.verified?.type
+    ? { user_id: provisionedUserId, verified: verification.data.verified }
+    : null;
 
   const live = query.data?.pitch ? query.data : null;
   const sample = mockPitchDetail(pitchId);
@@ -308,8 +319,9 @@ export default function PitchDetailPage() {
         open={identityOpen}
         pitch={pitch}
         onClose={() => setIdentityOpen(false)}
-        onConfirmed={data => {
-          setConfirmed(data);
+        onConfirmed={() => {
+          // The badge itself comes from the refetch the mutation triggers, not
+          // from this callback — so what shows here survives a reload.
           setNote({ ok: true, text: 'Identity confirmed — badge granted.' });
         }}
       />
