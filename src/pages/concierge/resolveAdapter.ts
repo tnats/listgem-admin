@@ -616,11 +616,18 @@ export function matchConcern(row: BuilderRow): string | null {
     if (!shared) reasons.push(`matched “${row.match.title}”`);
   }
 
-  const gotYear = Number(row.match.year);
-  // Two years, matching the window the server's suggestion filter now keeps
+  // Number(null) and Number('') are both 0, and 0 is finite — so a match with
+  // no year would read as disagreeing by two thousand of them.
+  const rawYear = row.match.year;
+  const gotYear = rawYear === null || rawYear === undefined || rawYear === '' ? NaN : Number(rawYear);
+  // Two years, matching the window the server's suggestion filter keeps
   // (listgem-platform#564). Release dates vary by region and a registry can
   // date a film by its festival run; a decade is a different film. Disagreeing
   // with the server here would only flag matches it has already judged fine.
+  //
+  // Same rule as theirs, both halves: withheld — here, flagged — only when we
+  // know both years and they disagree by more than two. A missing year on
+  // either side says nothing, so it says nothing.
   if (asked.year && Number.isFinite(gotYear) && Math.abs(asked.year - gotYear) > YEAR_TOLERANCE) {
     reasons.push(`the line says ${asked.year}, the match is ${gotYear}`);
   }
