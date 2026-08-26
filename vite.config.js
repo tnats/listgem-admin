@@ -15,6 +15,8 @@ export default defineConfig({
         // here, they 404 against the dev server while working fine in a
         // production build, which points debugging at entirely the wrong place.
         '/search-to-add', '/types', '/things',
+        // Cover art from hotlink-blocking sources is fetched through the API.
+        '/images',
       ].map(
         (path) => [
           path,

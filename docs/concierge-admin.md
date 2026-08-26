@@ -231,6 +231,21 @@ else's formatting fails silently, and a title mangled into something plausible i
 that is visibly notation. Which is why the write side is ours — we hold the cleaned title already, and
 reverse-engineering it server-side would be a guess.
 
+## Cover art
+
+Candidate rows carry a thumbnail, because the adjudication they support is often visual: `It (1990)` and
+`It (2017)` differ by a year in text and instantly by poster. The mis-picks that prompted this — Hannibal
+resolving to The Silence of the Lambs, The Final Chapter to the 2002 original — were all chosen from a
+list of title, year and type.
+
+`imageUrl()` mirrors the web app's `getImageUrl`: Yelp serves 403 to a hotlinked image, so those go
+through the API's `/images/proxy`, and everything else is used directly rather than putting a CDN's
+traffic on our egress. `/images` is in the dev proxy list, or it 404s in dev while working in a build.
+
+The thumbnail box is rendered whether or not there is an image. Hiding a failed load is the wrong default
+when a whole source can fail at once: a hotlink-blocked list would degrade into something that looks
+deliberately text-only, and nobody reports what they cannot see.
+
 ## Two item counts that are both right
 
 The admin and the invite page count different things, and neither is wrong:
