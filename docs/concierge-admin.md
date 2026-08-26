@@ -202,8 +202,11 @@ Three rules hold it together, and each exists because of a specific failure:
 
 - **Exactly one step is live.** A rail that answers "what now" with two answers is not a rail. Pinned by
   a test that sweeps the realistic states.
-- **`done` needs server evidence.** The build step reads `item_count`/`resolved_count`, so a builder full
-  of unsaved rows does not tick it. Nothing records that an invite was *sent*, so that step ticks on the
+- **`done` needs server evidence.** The build step counts the item rows `GET /pitches/:id` returns, so a
+  builder full of unsaved rows does not tick it. It counts the *rows*, not `item_count`/`resolved_count`:
+  that endpoint returns the array without the aggregates, and reading the aggregates there reported
+  "nothing saved yet" for a finished forty-item list — and showed 0/0 in the page header. `itemCounts()`
+  prefers the array and falls back to the aggregates for a board row, which has the counts and no array. Nothing records that an invite was *sent*, so that step ticks on the
   claim rather than pretending to know.
 - **`waiting` needs evidence the ball is with them.** `pitched` only means we marked it pitched; calling
   that "waiting on them" would excuse an outreach nobody made. `accepted` is the target answering, so the

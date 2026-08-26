@@ -34,10 +34,11 @@ function Crumb({ step, live }) {
  * alone, so it helps someone who doesn't know the sequence without slowing
  * down someone who does.
  */
-export default function PitchFlowRail({ pitch, confirmed, onTab, onStatus, onModal, busy }) {
+export default function PitchFlowRail({ pitch, items, confirmed, onTab, onStatus, onModal, busy }) {
   const [copied, setCopied] = useState(false);
   const steps = pitchFlow({
     pitch,
+    items,
     confirmed,
     previewHref: previewUrl(pitch?.preview_token),
     inviteHref: inviteUrl(pitch?.invite_token),
