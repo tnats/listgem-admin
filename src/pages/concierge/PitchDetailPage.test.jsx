@@ -272,3 +272,54 @@ describe('pitch detail — sending both links', () => {
     expect(screen.getByRole('button', { name: /^Copy invite link$/i })).toBeTruthy();
   });
 });
+
+describe('pitch detail — a confirmed identity survives a reload', () => {
+  const provisioned = {
+    ...BASE,
+    status: 'provisioned',
+    invite_used_at: '2026-08-26T19:00:00Z',
+    provisioned_user_id: 'usr_7',
+    provisioned_list_id: 'lst_9',
+  };
+
+  function serveWith(pitch, verification) {
+    client.get.mockImplementation(url => {
+      if (url === '/pitches/p_1') return Promise.resolve({ data: { pitch, items: [], events: [] } });
+      if (url === '/verification/usr_7/history') return Promise.resolve({ data: verification });
+      return Promise.reject(new Error('not mocked'));
+    });
+  }
+
+  it('reads the badge from the server, not from what this session did', async () => {
+    // Held in component state, the confirmation vanished on refresh: the grant
+    // was real and the page had no idea.
+    serveWith(provisioned, { verified: { type: 'individual', proof: null, since: '2026-08-26T19:05:00Z' }, history: [] });
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: /identity/i }));
+    await vi.waitFor(() => expect(screen.getByText(/Identity confirmed for usr_7/i)).toBeTruthy());
+  });
+
+  it('says nothing when the account is not verified', async () => {
+    serveWith(provisioned, { verified: null, history: [] });
+    renderDetail();
+
+    fireEvent.click(await screen.findByRole('button', { name: /identity/i }));
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: /confirm identity/i })).toBeTruthy());
+    expect(screen.queryByText(/Identity confirmed for/i)).toBeNull();
+  });
+
+  it('never asks about a user id the sample pitch invented', async () => {
+    // The page falls back to a mock pitch when the API has nothing; querying
+    // verification for that fabricated id would answer a real question with
+    // invented data.
+    // Reset first: the mock's call history accumulates across tests in this
+    // file, and the claim here is about what *this* render asks for.
+    client.get.mockReset();
+    client.get.mockRejectedValue(new Error('offline'));
+    renderDetail();
+
+    await vi.waitFor(() => expect(client.get).toHaveBeenCalled());
+    expect(client.get.mock.calls.every(c => !String(c[0]).includes('/verification/'))).toBe(true);
+  });
+});

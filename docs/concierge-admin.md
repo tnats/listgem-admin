@@ -231,6 +231,22 @@ else's formatting fails silently, and a title mangled into something plausible i
 that is visibly notation. Which is why the write side is ours — we hold the cleaned title already, and
 reverse-engineering it server-side would be a guess.
 
+## Where the identity badge comes from
+
+The pitch page reads it from `GET /verification/:userId/history` for `pitch.provisioned_user_id`, whose
+`verified` field is the current state. Never from what the session happens to remember: held in
+component state it looked right until the first refresh, when the grant was real and the page had no
+idea.
+
+Two things it deliberately does not do. There is **no mock fallback** — `VerificationTool` has one, which
+is fine for a browsing surface and wrong here, because inventing a confirmation is worse than showing
+none when the subject is whether a badge was granted. And the query is keyed on **live** data only: this
+page falls back to a sample pitch when the API has nothing, and asking about a fabricated user id would
+answer a real question with invented data.
+
+`confirmIdentity` invalidates `['verification']` as well as `['pitches']`, since the grant lands on the
+user rather than the pitch.
+
 ## Cover art
 
 Candidate rows carry a thumbnail, because the adjudication they support is often visual: `It (1990)` and
