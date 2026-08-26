@@ -10,9 +10,9 @@ import {
   AUTOMATIC_STATUSES,
   canConfirmIdentity,
   canEditItems,
-  canRepitch,
   canTakedown,
   offeredTransitions,
+  shouldExplainRepitch,
 } from './pitchRules';
 import { mockPitchDetail } from './mockPitches';
 import PitchBuilder from './PitchBuilder';
@@ -187,7 +187,7 @@ export default function PitchDetailPage() {
               {AUTOMATIC_STATUSES.includes(next) ? ' (repair)' : ''}
             </Button>
           ))}
-          {pitch.status !== 'draft' && !canRepitch(pitch) && pitch.status !== 'archived' && (
+          {shouldExplainRepitch(pitch) && (
             <span className="text-[11px] text-gray-400">
               Re-pitch unavailable — the server has not marked this target re-pitchable.
             </span>
