@@ -1,0 +1,160 @@
+import { describe, expect, it } from 'vitest';
+import { currentStep, pitchFlow } from './pitchFlow';
+
+const base = {
+  pitch_id: 'p1',
+  target_name: 'Bob Bob',
+  proposed_title: 'Scary movies',
+  thing_type: 'Movie',
+  status: 'draft',
+  can_repitch: false,
+  item_count: 0,
+  resolved_count: 0,
+  preview_token: null,
+  invite_token: null,
+  invite_used_at: null,
+  invite_expires_at: null,
+};
+
+const flow = (over = {}, extra = {}) =>
+  pitchFlow({ pitch: { ...base, ...over }, previewHref: '/p', inviteHref: '/i', ...extra });
+const live = (over = {}, extra = {}) => currentStep(flow(over, extra));
+const stateOf = (steps, id) => steps.find(s => s.id === id)?.state;
+
+describe('pitchFlow — one live step, always', () => {
+  it('never shows two things to do at once', () => {
+    // The rail answers "what now" with one answer or it isn't a rail.
+    const cases = [
+      {},
+      { item_count: 40, resolved_count: 37 },
+      { item_count: 40, resolved_count: 40 },
+      { item_count: 40, resolved_count: 40, preview_token: 'p', invite_token: 'i' },
+      { status: 'pitched', item_count: 40, resolved_count: 40, preview_token: 'p', invite_token: 'i' },
+      { status: 'accepted', item_count: 40, resolved_count: 40, preview_token: 'p', invite_token: 'i' },
+      { status: 'provisioned', item_count: 40, resolved_count: 40, preview_token: 'p', invite_token: 'i', invite_used_at: '2026-08-26T00:00:00Z' },
+    ];
+    for (const c of cases) {
+      const n = flow(c).filter(s => ['current', 'blocked', 'waiting'].includes(s.state)).length;
+      expect(n, JSON.stringify(c)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('returns nothing at all without a pitch', () => {
+    expect(pitchFlow({ pitch: null })).toEqual([]);
+    expect(currentStep([])).toBeNull();
+  });
+});
+
+describe('pitchFlow — the order the work actually happens in', () => {
+  it('starts at the list, not the links', () => {
+    expect(live().label).toMatch(/Build the list/i);
+    expect(live().action).toEqual({ kind: 'tab', tab: 'build', label: 'Open the builder' });
+  });
+
+  it('counts what is saved, not what is on screen', () => {
+    // item_count/resolved_count are the server's numbers. A builder full of
+    // unsaved rows must not tick this step.
+    const step = live({ item_count: 40, resolved_count: 37 });
+    expect(step.label).toMatch(/Build the list/i);
+    expect(step.detail).toMatch(/3 of 40/);
+  });
+
+  it('offers the links once the list is whole', () => {
+    expect(live({ item_count: 40, resolved_count: 40 }).label).toMatch(/Generate the links/i);
+  });
+
+  it('offers the preview alongside the links, since that is when you check it', () => {
+    const steps = flow({ item_count: 40, resolved_count: 40, preview_token: 'p', invite_token: 'i' });
+    expect(steps.find(s => s.id === 'links').extra).toEqual({ kind: 'link', href: '/p', label: 'Open preview' });
+  });
+});
+
+describe('pitchFlow — the gate that sent a dead invite', () => {
+  const built = { item_count: 40, resolved_count: 40, preview_token: 'p', invite_token: 'i' };
+
+  it('puts "mark as pitched" before "send the invite"', () => {
+    // The failure this exists for: tokens issued on a draft, invite sent, and
+    // the server answered the *target* with 410 not_claimable_from_draft.
+    const step = live(built);
+    expect(step.label).toMatch(/Mark as pitched/i);
+    expect(step.detail).toMatch(/draft cannot be claimed/i);
+    expect(step.action).toEqual({ kind: 'status', to: 'pitched', label: 'Mark as pitched' });
+  });
+
+  it('holds the invite back while the pitch is a draft', () => {
+    expect(stateOf(flow(built), 'send')).toBe('todo');
+  });
+
+  it('hands over the invite once it has been pitched', () => {
+    const step = live({ ...built, status: 'pitched' });
+    expect(step.label).toMatch(/Send the invite/i);
+    expect(step.action).toEqual({ kind: 'copy', text: '/i', label: 'Copy invite link' });
+  });
+
+  it('does not pretend to know a link was sent', () => {
+    expect(live({ ...built, status: 'pitched' }).detail).toMatch(/nothing records the send/i);
+  });
+});
+
+describe('pitchFlow — steps that are not the operator\'s move', () => {
+  const sent = { item_count: 40, resolved_count: 40, preview_token: 'p', invite_token: 'i', status: 'pitched' };
+
+  it('waits only once there is evidence the ball is with them', () => {
+    // `pitched` means we marked it pitched, not that anyone received anything —
+    // calling that "waiting on them" would excuse an outreach nobody made.
+    expect(stateOf(flow(sent), 'claim')).toBe('todo');
+
+    // `accepted` is the target answering, so the wait is real.
+    const claim = flow({ ...sent, status: 'accepted' }).find(s => s.id === 'claim');
+    expect(claim.state).toBe('waiting');
+    expect(claim.action).toBeNull();
+    expect(claim.detail).toMatch(/accepted and have not claimed/i);
+    // Re-sending is the one useful move while waiting.
+    expect(claim.extra).toEqual({ kind: 'copy', text: '/i', label: 'Copy invite link' });
+  });
+
+  it('sends you to Outreach for an expired invite rather than re-issuing behind your back', () => {
+    // Re-issue kills any link already sent; that consequence is spelled out in
+    // the panel, so the rail navigates instead of acting.
+    const step = live({ ...sent, invite_expires_at: '2020-01-01T00:00:00Z' });
+    expect(step.state).toBe('blocked');
+    expect(step.action.kind).toBe('tab');
+    expect(step.action.label).not.toMatch(/^Re-issue tokens$/);
+  });
+});
+
+describe('pitchFlow — identity comes after the claim, never before', () => {
+  const claimed = {
+    item_count: 40, resolved_count: 40, preview_token: 'p', invite_token: 'i',
+    invite_used_at: '2026-08-26T00:00:00Z', status: 'provisioned',
+  };
+
+  it('asks for identity only once the draft is provisioned', () => {
+    const step = live(claimed);
+    expect(step.label).toMatch(/Confirm identity/i);
+    expect(step.detail).toMatch(/claim alone is not proof/i);
+  });
+
+  it('keeps identity out of reach before the claim', () => {
+    expect(stateOf(flow({ ...claimed, status: 'pitched', invite_used_at: null }), 'identity')).toBe('todo');
+  });
+
+  it('finishes when identity is confirmed', () => {
+    const steps = flow(claimed, { confirmed: { user_id: 'u1' } });
+    expect(stateOf(steps, 'identity')).toBe('done');
+    expect(currentStep(steps)).toBeNull();
+  });
+});
+
+describe('pitchFlow — pitches that have ended', () => {
+  it('offers no next move on an archived pitch', () => {
+    const steps = flow({ status: 'archived' });
+    expect(steps).toHaveLength(1);
+    expect(steps[0].state).toBe('skipped');
+    expect(steps[0].detail).toMatch(/taken down/i);
+  });
+
+  it('says declined is terminal rather than offering a re-pitch', () => {
+    expect(flow({ status: 'declined' })[0].detail).toMatch(/terminal/i);
+  });
+});

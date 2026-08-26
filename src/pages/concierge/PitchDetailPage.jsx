@@ -17,6 +17,7 @@ import {
 import { mockPitchDetail } from './mockPitches';
 import PitchBuilder from './PitchBuilder';
 import TokensPanel from './TokensPanel';
+import PitchFlowRail from './PitchFlowRail';
 import ConfirmIdentityModal from './ConfirmIdentityModal';
 import TakedownModal from './TakedownModal';
 import EditDetailsModal from './EditDetailsModal';
@@ -178,6 +179,15 @@ export default function PitchDetailPage() {
           )}
         </div>
       </div>
+
+      <PitchFlowRail
+        pitch={pitch}
+        confirmed={confirmed}
+        busy={setStatus.isPending}
+        onTab={setTab}
+        onStatus={move}
+        onModal={m => (m === 'identity' ? setIdentityOpen(true) : setEditOpen(true))}
+      />
 
       {/* Tabs */}
       <div className="mb-4 flex gap-1 border-b border-gray-200">
