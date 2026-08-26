@@ -279,8 +279,17 @@ Bergman's Persona (1966)]"*, italicised under Persona.
 It now carries the same **target sees this** marker as the intake fields. Internal working notes belong
 on the pitch itself, under Edit details — `pitch_lists.notes` is staff-only and is not copied anywhere.
 
+Notes now render in the table under the pasted text, and the summary counts them — they used to appear
+only in the focused-row editor, which is how one written weeks earlier on row 2 of 11 stayed invisible
+until it surfaced on a stranger's list. Nobody re-reads eleven rows one at a time to check their own
+notes.
+
 Worth checking existing pitches for notes written while the label was wrong; provisioning will carry them
-across.
+across, and they are now visible at a glance.
+
+There is deliberately no *internal* per-row note: the field is target-facing by design, and inventing a
+second one client-side would be a place to write things that quietly aren't saved. Requested properly in
+listgem-platform#572.
 
 ## Two item counts that are both right
 

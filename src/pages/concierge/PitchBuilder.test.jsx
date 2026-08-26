@@ -831,3 +831,45 @@ describe('builder — the item note is not internal', () => {
     });
   });
 });
+
+describe('builder — notes are visible without hunting for them', () => {
+  const rows = [
+    { raw_text: 'Fanny & Alexander (1982) 🇸🇪 9.1/10', thing_id: 'movie_fa', status: 'resolved', candidates: [], match: { title: 'Fanny and Alexander', type: 'Movie', year: 1982 }, note: '', dropped: false, confidence: 1, reason: null },
+    { raw_text: 'Persona (1966) 🇸🇪 8.6/10', thing_id: 'movie_p', status: 'resolved', candidates: [], match: { title: 'Persona', type: 'Movie', year: 1966 }, note: '[#553: cleared a TVSeries mismatch on a Movie pitch]', dropped: false, confidence: 1, reason: null },
+  ];
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.get.mockRejectedValue(new Error('no search'));
+    sessionStorage.setItem('pitchDraft:p_notes', JSON.stringify({ v: 1, savedAt: Date.now(), rows }));
+  });
+
+  it('shows the note in the row, not only when that row is focused', () => {
+    // Focused-row-only is how a working note survived to a stranger's list:
+    // nobody scrolls eleven rows one at a time to re-read their own notes.
+    renderWithProviders(<PitchBuilder pitchId="p_notes" thingType="Movie" items={[]} />);
+    const note = screen.getByText(/#553: cleared a TVSeries mismatch/);
+    expect(note.textContent).toMatch(/they see this/i);
+  });
+
+  it('counts them in the summary, so the total is visible before saving', () => {
+    renderWithProviders(<PitchBuilder pitchId="p_notes" thingType="Movie" items={[]} />);
+    expect(screen.getByText(/1 with a note they see/i)).toBeTruthy();
+  });
+
+  it('says nothing about rows with no note', () => {
+    sessionStorage.setItem('pitchDraft:p_clean', JSON.stringify({
+      v: 1, savedAt: Date.now(), rows: [{ ...rows[0] }],
+    }));
+    renderWithProviders(<PitchBuilder pitchId="p_clean" thingType="Movie" items={[]} />);
+    expect(screen.queryByText(/with a note they see/i)).toBeNull();
+  });
+
+  it('ignores a note on a dropped row, which is not going anywhere', () => {
+    sessionStorage.setItem('pitchDraft:p_dropped', JSON.stringify({
+      v: 1, savedAt: Date.now(), rows: [{ ...rows[1], dropped: true }],
+    }));
+    renderWithProviders(<PitchBuilder pitchId="p_dropped" thingType="Movie" items={[]} />);
+    expect(screen.queryByText(/with a note they see/i)).toBeNull();
+  });
+});
