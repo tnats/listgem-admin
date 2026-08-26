@@ -643,9 +643,12 @@ describe('builder — the same item twice', () => {
     sessionStorage.setItem('pitchDraft:p_dup', JSON.stringify({ v: 1, savedAt: Date.now(), rows: twice }));
   });
 
-  it('names the repeat and refuses to save it', async () => {
+  it('names both rows and the film, so the wrong one can be found', async () => {
+    // Naming only the later row pointed the operator at the good row: a
+    // mis-picked candidate on an earlier row collided with the correct one,
+    // and "drop the repeat" would have kept the mistake.
     renderWithProviders(<PitchBuilder pitchId="p_dup" thingType="Movie" items={[]} />);
-    expect(screen.getByText(/Row 2 is already on this list/i)).toBeTruthy();
+    expect(screen.getByText(/Rows 1 and 2 both point at “Alien”/i)).toBeTruthy();
 
     // The `s` shortcut bypasses the disabled button, so guard the operation.
     fireEvent.keyDown(window, { key: 's' });
@@ -655,9 +658,9 @@ describe('builder — the same item twice', () => {
 
   it('drops the repeat and keeps the first, then saves', async () => {
     renderWithProviders(<PitchBuilder pitchId="p_dup" thingType="Movie" items={[]} />);
-    fireEvent.click(screen.getByRole('button', { name: /^Drop it$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Drop row 2$/i }));
 
-    expect(screen.queryByText(/already on this list/i)).toBeNull();
+    expect(screen.queryByText(/both point at/i)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /save items/i }));
     await vi.waitFor(() => expect(client.put).toHaveBeenCalled());
     const sent = client.put.mock.calls[0][1].items;

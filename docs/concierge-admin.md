@@ -156,9 +156,14 @@ start over from new text.
 
 Two checks, because they catch different things. Pasting again skips lines already on the list and says
 how many — a build survives a reload now, so a re-paste lands on rows that are still there. Separately,
-two rows that *resolved* to the same thing are reported by row number with a one-click drop, and block
-the save the way a type mismatch does. Only the resolved ids expose those; the text check cannot see
-them.
+two rows that *resolved* to the same thing block the save the way a type mismatch does. Only the resolved
+ids expose those; the text check cannot see them.
+
+Both rows in a collision are named, with the film they landed on — not just the later one. The later row
+is not reliably the wrong one: a mis-picked candidate on row 17 collided with the correct row 31, and
+naming only 31 would have had the operator delete the film and keep the mistake. Deciding which match is
+wrong needs both rows in view, so the strip offers a jump to the first and a drop of the rest, and does
+not choose.
 
 ### Ambiguous vs unresolved
 

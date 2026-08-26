@@ -26,6 +26,7 @@ import {
   queryFor,
   dedupeAgainst,
   duplicateIndices,
+  duplicateGroups,
   pendingIndices,
   rowsFromItems,
   rowsFromParsed,
@@ -198,6 +199,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     .filter(({ row }) => !row.dropped && row.thing_id && !typeMatchesPitch(row.match?.type, thingType));
   // Two rows pointing at one film. Distinct from the paste-time text check:
   // these arrive from resolution, so only the matched ids expose them.
+  const dupeGroups = duplicateGroups(rows);
   const duplicates = duplicateIndices(rows);
   const savedCount = rowsFromItems(items).length;
   const focusedRow = rows[focus];
@@ -856,24 +858,37 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         </div>
       )}
 
-      {duplicates.length > 0 && (
-        <div className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-          <span className="font-medium">
-            Row {duplicates.map(i => i + 1).join(', ')} {duplicates.length === 1 ? 'is' : 'are'} already on
-            this list.
-          </span>{' '}
-          The same film twice reads as carelessness on the pitch itself. Dropping keeps the first of each.
-          <button
-            onClick={() => {
-              const drop = new Set(duplicates);
-              setRows(rs => rs.map((r, i) => (drop.has(i) ? { ...r, dropped: true } : r)));
-              setDirty(true);
-            }}
-            disabled={readOnly}
-            className="ml-2 font-medium underline decoration-dotted underline-offset-2 disabled:no-underline disabled:opacity-50"
-          >
-            Drop {duplicates.length === 1 ? 'it' : `all ${duplicates.length}`}
-          </button>
+      {dupeGroups.length > 0 && (
+        <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+          {dupeGroups.map(group => (
+            <div key={group.thing_id}>
+              <span className="font-medium">
+                Rows {group.indices.map(i => i + 1).join(' and ')} both point at{' '}
+                {group.title ? `“${group.title}”` : 'the same item'}.
+              </span>{' '}
+              One of them matched the wrong film — check which before dropping either.
+              <button
+                onClick={() => {
+                  setFocus(group.indices[0]);
+                }}
+                className="ml-2 font-medium underline decoration-dotted underline-offset-2"
+              >
+                Go to row {group.indices[0] + 1}
+              </button>
+              {!readOnly && (
+                <button
+                  onClick={() => {
+                    const drop = new Set(group.indices.slice(1));
+                    setRows(rs => rs.map((r, i) => (drop.has(i) ? { ...r, dropped: true } : r)));
+                    setDirty(true);
+                  }}
+                  className="ml-2 font-medium underline decoration-dotted underline-offset-2"
+                >
+                  Drop row {group.indices.slice(1).map(i => i + 1).join(', ')}
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
