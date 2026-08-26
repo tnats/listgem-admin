@@ -67,7 +67,10 @@ export interface BuilderRow {
   status: RowStatus;
   candidates: Candidate[];
   match: Candidate | null;
+  /** Copied onto the target's list at provisioning, and published with it. */
   note: string;
+  /** Staff only — never copied anywhere (listgem-platform#572). */
+  internal_note: string;
   dropped: boolean;
   confidence: number | null;
   reason: string | null;
@@ -119,6 +122,14 @@ export interface ItemPayload {
   thing_id: string | null;
   resolution_status: 'resolved' | 'ambiguous';
   note: string | null;
+  /**
+   * The operator's working note. Kept on the pitch and copied nowhere: not to
+   * the claimed list, not into the preview payload, not into the invite
+   * sample. Exists because with only `note` — which the target reads — a
+   * working note either went to them or never got written
+   * (listgem-platform#572).
+   */
+  internal_note: string | null;
   /**
    * A line safe to show the target (listgem-platform#565).
    *
@@ -573,6 +584,7 @@ export function toItemsPayload(rows: BuilderRow[]): ItemPayload[] {
       thing_id: row.thing_id || null,
       resolution_status: row.thing_id ? 'resolved' : 'ambiguous',
       note: row.note?.trim() ? row.note.trim() : null,
+      internal_note: row.internal_note?.trim() ? row.internal_note.trim() : null,
       // Null rather than an empty string when there is nothing to show: the
       // server treats null as "no display line", and an unlabelled chip beats
       // a blank one.
@@ -733,7 +745,10 @@ export function rowsFromParsed(parsed: ParsedCandidate[]): BuilderRow[] {
     match: null,
     // Dropped rather than removed: it stays visible and struck through, and
     // one keystroke puts it back if the guess was wrong.
-    note: queries[i].header ? 'Column headings, not an item.' : '',
+    note: '',
+    // The heading explanation is for us, not for the target — it would
+    // otherwise ride onto their list under a row we already dropped.
+    internal_note: queries[i].header ? 'Column headings, not an item.' : '',
     dropped: queries[i].header,
     confidence: null,
     reason: null,
@@ -781,6 +796,7 @@ export function rowsFromItems(items: unknown): BuilderRow[] {
         candidates: [],
         match: match?.thing_id || match?.title !== '(untitled)' ? match : null,
         note: typeof it.note === 'string' ? it.note : '',
+        internal_note: typeof it.internal_note === 'string' ? it.internal_note : '',
         dropped: false,
         confidence: null,
         reason: null,

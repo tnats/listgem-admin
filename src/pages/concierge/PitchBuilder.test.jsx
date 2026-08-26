@@ -4,6 +4,7 @@ import { fireEvent, screen } from '@testing-library/react';
 import { renderWithProviders } from '../../test/utils';
 import client from '../../api/client';
 import PitchBuilder from './PitchBuilder';
+import { normalizeParsed, rowsFromParsed } from './resolveAdapter';
 
 vi.mock('../../api/client', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
@@ -871,5 +872,71 @@ describe('builder — notes are visible without hunting for them', () => {
     }));
     renderWithProviders(<PitchBuilder pitchId="p_dropped" thingType="Movie" items={[]} />);
     expect(screen.queryByText(/with a note they see/i)).toBeNull();
+  });
+});
+
+describe('builder — the two notes are told apart', () => {
+  const rows = [{
+    raw_text: 'Persona (1966) 🇸🇪 8.6/10', thing_id: 'movie_p', status: 'resolved', candidates: [],
+    match: { title: 'Persona', type: 'Movie', year: 1966 },
+    note: 'The one that made me want to make films.',
+    internal_note: '[#553: cleared a TVSeries mismatch on a Movie pitch]',
+    dropped: false, confidence: 1, reason: null,
+  }];
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.put.mockReset();
+    client.get.mockRejectedValue(new Error('no search'));
+    client.put.mockResolvedValue({ data: { success: true, item_count: 1 } });
+    sessionStorage.setItem('pitchDraft:p_two', JSON.stringify({ v: 1, savedAt: Date.now(), rows }));
+  });
+
+  it('sends both, on the fields that mean what they say', () => {
+    // The working note used to have nowhere to go but the field the target
+    // reads, which is how "[#553: cleared a TVSeries mismatch…]" reached a
+    // stranger's list.
+    renderWithProviders(<PitchBuilder pitchId="p_two" thingType="Movie" items={[]} />);
+    fireEvent.click(screen.getByRole('button', { name: /save items/i }));
+
+    return vi.waitFor(() => {
+      const sent = client.put.mock.calls[0][1].items[0];
+      expect(sent.note).toBe('The one that made me want to make films.');
+      expect(sent.internal_note).toBe('[#553: cleared a TVSeries mismatch on a Movie pitch]');
+    });
+  });
+
+  it('marks only the target-visible one as target-visible', () => {
+    renderWithProviders(<PitchBuilder pitchId="p_two" thingType="Movie" items={[]} />);
+    expect(screen.getByText(/Note on this item/i).textContent).toMatch(/target sees this/i);
+    expect(screen.getByText(/^Internal note/i).textContent).toMatch(/copied nowhere/i);
+  });
+
+  it('counts the note the target reads', () => {
+    renderWithProviders(<PitchBuilder pitchId="p_two" thingType="Movie" items={[]} />);
+    expect(screen.getByText(/1 with a note they see/i)).toBeTruthy();
+  });
+
+  it('does not count an internal note, which is nobody else\'s business', () => {
+    // Separate test rather than a second render: the first stays mounted, and
+    // the assertion would find its summary instead of this one's.
+    sessionStorage.setItem('pitchDraft:p_int', JSON.stringify({
+      v: 1, savedAt: Date.now(), rows: [{ ...rows[0], note: '' }],
+    }));
+    renderWithProviders(<PitchBuilder pitchId="p_int" thingType="Movie" items={[]} />);
+    expect(screen.queryByText(/with a note they see/i)).toBeNull();
+    expect(screen.getByText(/#553: cleared a TVSeries mismatch/)).toBeTruthy();
+  });
+
+  it('keeps a dropped heading row\'s explanation off the target\'s list', () => {
+    // rowsFromParsed writes that explanation, and it is for us.
+    const parsed = rowsFromParsed(normalizeParsed([
+      'Rank Film Year Worldwide gross Ref',
+      '1 It 2017 $719,766,009 [1][2]',
+      '2 The Sixth Sense 1999 $672,806,292 [3][4]',
+      '3 I Am Legend 2007 $585,532,684 [5][6]',
+    ]));
+    expect(parsed[0].note).toBe('');
+    expect(parsed[0].internal_note).toMatch(/Column headings/);
   });
 });

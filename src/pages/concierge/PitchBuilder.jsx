@@ -412,6 +412,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         candidates: [],
         match,
         note: '',
+        internal_note: '',
         dropped: false,
         confidence: null,
         reason: null,
@@ -785,6 +786,11 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
           {row.note?.trim() && (
             <span className="mt-0.5 block truncate text-[11px] italic text-indigo-700" title={row.note}>
               “{row.note.trim()}” — they see this
+            </span>
+          )}
+          {row.internal_note?.trim() && (
+            <span className="mt-0.5 block truncate text-[11px] text-gray-400" title={row.internal_note}>
+              {row.internal_note.trim()} — internal
             </span>
           )}
         </>
@@ -1278,6 +1284,21 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
                   value={focusedRow.note || ''}
                   onChange={e => patchRow(focus, { note: e.target.value })}
                   placeholder="A line about this pick, in their voice — not a working note"
+                />
+              </div>
+              {/* The working note now has somewhere to go. Without it, "why did
+                  this row match something odd" either went to the target or
+                  never got written. */}
+              <div className="mt-2">
+                <label htmlFor="row_internal_note" className="mb-1 block text-[11px] font-medium text-gray-500">
+                  Internal note
+                  <span className="ml-1 text-[10px] font-normal text-gray-400">staff only — copied nowhere</span>
+                </label>
+                <TextInput
+                  id="row_internal_note"
+                  value={focusedRow.internal_note || ''}
+                  onChange={e => patchRow(focus, { internal_note: e.target.value })}
+                  placeholder="Why this row needed work, what to re-check…"
                 />
               </div>
               <div className="mt-2 text-[11px] text-gray-400">

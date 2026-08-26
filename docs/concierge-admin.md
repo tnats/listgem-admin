@@ -287,9 +287,14 @@ notes.
 Worth checking existing pitches for notes written while the label was wrong; provisioning will carry them
 across, and they are now visible at a glance.
 
-There is deliberately no *internal* per-row note: the field is target-facing by design, and inventing a
-second one client-side would be a place to write things that quietly aren't saved. Requested properly in
-listgem-platform#572.
+`internal_note` is the working note — staff only, copied nowhere: not to the claimed list, not into the
+preview payload, not into the invite sample, and guarded server-side at all three
+(listgem-platform#572/#573). It exists because with only `note` a working note either went to the target
+or never got written. Both render in the row, distinctly, and the summary counts only the one the target
+reads.
+
+A dropped heading row's explanation ("Column headings, not an item.") is an internal note for the same
+reason — it is for us, and it used to sit in the field that travels.
 
 ## Two item counts that are both right
 
