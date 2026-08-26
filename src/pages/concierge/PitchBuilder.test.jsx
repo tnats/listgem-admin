@@ -792,3 +792,42 @@ describe('builder — cover art on the candidates', () => {
     expect(screen.getAllByRole('presentation', { hidden: true })).toHaveLength(2);
   });
 });
+
+describe('builder — the item note is not internal', () => {
+  const row = [{
+    raw_text: 'Persona (1966) 🇸🇪 8.6/10', thing_id: 'movie_persona_1966', status: 'resolved',
+    candidates: [], match: { title: 'Persona', type: 'Movie', year: 1966 },
+    note: '', dropped: false, confidence: 1, reason: null,
+  }];
+
+  beforeEach(() => {
+    client.get.mockReset();
+    client.put.mockReset();
+    client.get.mockRejectedValue(new Error('no search'));
+    client.put.mockResolvedValue({ data: { success: true, item_count: 1 } });
+    sessionStorage.setItem('pitchDraft:p_note', JSON.stringify({ v: 1, savedAt: Date.now(), rows: row }));
+  });
+
+  it('says the target sees it, because provisioning copies it onto their list', () => {
+    // It said "internal". A staff note written under that promise reached a
+    // claimed list reading "[#553: cleared a TVSeries mismatch…]", italicised
+    // under Persona, ready to publish.
+    renderWithProviders(<PitchBuilder pitchId="p_note" thingType="Movie" items={[]} />);
+    const label = screen.getByText(/Note on this item/i);
+    expect(label.textContent).toMatch(/target sees this/i);
+    expect(screen.queryByPlaceholderText(/internal/i)).toBeNull();
+  });
+
+  it('still sends whatever the operator wrote', () => {
+    renderWithProviders(<PitchBuilder pitchId="p_note" thingType="Movie" items={[]} />);
+    fireEvent.change(screen.getByPlaceholderText(/in their voice/i), {
+      target: { value: 'The one that made me want to make films.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /save items/i }));
+
+    return vi.waitFor(() => {
+      expect(client.put).toHaveBeenCalled();
+      expect(client.put.mock.calls[0][1].items[0].note).toBe('The one that made me want to make films.');
+    });
+  });
+});
