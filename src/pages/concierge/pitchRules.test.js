@@ -19,6 +19,8 @@ import {
   tokenIssueBlockedReason,
   typeMatchesPitch,
   inviteClaimBlockedReason,
+
+  shouldExplainRepitch,
 } from './pitchRules';
 
 const pitch = (over = {}) => ({ status: 'draft', can_repitch: false, ...over });
@@ -245,5 +247,31 @@ describe('inviteClaimBlockedReason — what the server would say', () => {
 
   it('still lets a draft mint tokens, so the preview can be reviewed', () => {
     expect(canIssueTokens(pitch({ status: 'draft' }))).toBe(true);
+  });
+});
+
+describe('shouldExplainRepitch — say it only where it means something', () => {
+  const p = (over = {}) => ({ pitch_id: 'p1', status: 'pitched', can_repitch: false, ...over });
+
+  it('explains it on no_response, the one status a re-pitch would come from', () => {
+    expect(shouldExplainRepitch(p({ status: 'no_response' }))).toBe(true);
+  });
+
+  it('stays quiet on a healthy pitch', () => {
+    // "Re-pitch unavailable" on a pitched or accepted pitch answers a question
+    // nobody asked and reads as an error. It cost an operator time mid-test.
+    for (const status of ['pitched', 'accepted', 'provisioned', 'draft', 'archived']) {
+      expect(shouldExplainRepitch(p({ status })), status).toBe(false);
+    }
+  });
+
+  it('stays quiet on declined, which can only be archived', () => {
+    // The machine offers no path to `pitched` from here, so there is nothing
+    // to explain the absence of.
+    expect(shouldExplainRepitch(p({ status: 'declined' }))).toBe(false);
+  });
+
+  it('says nothing when the server does allow a re-pitch', () => {
+    expect(shouldExplainRepitch(p({ status: 'no_response', can_repitch: true }))).toBe(false);
   });
 });

@@ -150,6 +150,21 @@ export function offeredTransitions(pitch: MaybePitch): PitchStatus[] {
   });
 }
 
+/**
+ * Whether "re-pitch unavailable" is worth saying at all.
+ *
+ * Only where a re-pitch is a move the machine would otherwise allow — which is
+ * `no_response` alone. `declined` can only be archived, and a pitch that is
+ * currently pitched, accepted or provisioned has no business being told that
+ * re-pitching is off: it answers a question nobody asked and reads as an error
+ * on a perfectly healthy pitch.
+ */
+export function shouldExplainRepitch(pitch: MaybePitch): boolean {
+  if (!pitch || pitch.status === 'draft') return false;
+  if (!allowedTransitions(pitch.status).includes('pitched')) return false;
+  return !canRepitch(pitch);
+}
+
 /** PUT /pitches/:id/items 409s once a pitch is provisioned or archived. */
 export function canEditItems(pitch: MaybePitch): boolean {
   if (!pitch) return false;
