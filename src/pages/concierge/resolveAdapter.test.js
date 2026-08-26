@@ -748,3 +748,51 @@ describe('matchConcern — a missing year is not a disagreement', () => {
     expect(matchConcern(withMatchYear(1991))).toMatch(/2001.*1991/);
   });
 });
+
+describe('display_text — what the target may be shown', () => {
+  it('sends the title we searched on, not the operator notation', () => {
+    // The line that exposed this in production, from the invite teaser:
+    // "The Emigrants + The New Land (1971, 1972) 🇸🇪 8.6/10"
+    const rows = rowsFromParsed(normalizeParsed([
+      'The Emigrants + The New Land (1971, 1972) 🇸🇪 8.6/10',
+      'Persona (1966) 🇸🇪 8.6/10',
+    ]));
+    expect(toItemsPayload(rows).map(i => i.display_text)).toEqual([
+      'The Emigrants + The New Land',
+      'Persona',
+    ]);
+    // raw_text is untouched — it stays our provenance record.
+    expect(toItemsPayload(rows)[0].raw_text).toBe('The Emigrants + The New Land (1971, 1972) 🇸🇪 8.6/10');
+  });
+
+  it('strips a pasted table row down to its title', () => {
+    const rows = rowsFromParsed(normalizeParsed([
+      'Rank Film Year Worldwide gross Ref',
+      '22 Resident Evil: The Final Chapter 2017 $314,101,190 [43][44]',
+      '23 Annabelle: Creation 2017 $306,592,201 [45][46]',
+      '24 Resident Evil: Afterlife 2010 $300,228,084 [47][48]',
+    ]));
+    // The heading row arrives dropped, so it never reaches the payload.
+    expect(toItemsPayload(rows).map(i => i.display_text)).toEqual([
+      'Resident Evil: The Final Chapter',
+      'Annabelle: Creation',
+      'Resident Evil: Afterlife',
+    ]);
+  });
+
+  it('sends null rather than an empty string when there is nothing to show', () => {
+    // The server has no fallback by design; null means "no display line".
+    const rows = rowsFromParsed(normalizeParsed(['   🇸🇪  8.6/10 ']));
+    expect(toItemsPayload(rows)[0].display_text).toBeNull();
+  });
+
+  it('labels resolved rows too, so a row does not depend on staying resolved', () => {
+    const rows = rowsFromParsed(normalizeParsed(['Persona (1966)']));
+    rows[0].thing_id = 'movie_persona_1966';
+    expect(toItemsPayload(rows)[0]).toMatchObject({
+      thing_id: 'movie_persona_1966',
+      resolution_status: 'resolved',
+      display_text: 'Persona',
+    });
+  });
+});
