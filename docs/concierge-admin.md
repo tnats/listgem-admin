@@ -238,6 +238,12 @@ Candidate rows carry a thumbnail, because the adjudication they support is often
 resolving to The Silence of the Lambs, The Final Chapter to the 2002 original — were all chosen from a
 list of title, year and type.
 
+Art is read from `image_url`, then `metadata.poster_url`, then `metadata.image`. The name matters more
+than it looks: on prod every Movie thing has a **null** top-level `image_url` and a populated
+`metadata.poster_url` — 11,952 of 11,952 — so reading only the obvious field renders an empty box for
+every candidate, and a hand-written fixture would have passed either way. The test uses a response copied
+off the wire for that reason.
+
 `imageUrl()` mirrors the web app's `getImageUrl`: Yelp serves 403 to a hotlinked image, so those go
 through the API's `/images/proxy`, and everything else is used directly rather than putting a CDN's
 traffic on our egress. `/images` is in the dev proxy list, or it 404s in dev while working in a build.

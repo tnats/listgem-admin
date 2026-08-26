@@ -6,6 +6,7 @@ import {
   chunkForBatch,
   normalizeParseOutcome,
   normalizeParsed,
+  normalizeCandidate,
   normalizeResolution,
   normalizeSearchResults,
   pendingIndices,
@@ -794,5 +795,47 @@ describe('display_text — what the target may be shown', () => {
       resolution_status: 'resolved',
       display_text: 'Persona',
     });
+  });
+});
+
+describe('candidate art — where production actually keeps it', () => {
+  // Verbatim from GET /things/movie_it_2017_687266e4 on prod, trimmed. Written
+  // from the wire rather than by hand: the whole failure is that a hand-written
+  // fixture carries whichever field name its author picked, and passes.
+  const PROD_THING = {
+    thing_id: 'movie_it_2017_687266e4',
+    type: 'Movie',
+    canonical_ids: { imdb_id: 'tt1396484', tmdb_movie_id: '346364' },
+    image_url: null,
+    metadata: {
+      year: '2017',
+      title: 'It',
+      rating: 7.241,
+      source: 'tmdb_api',
+      poster_url: 'https://image.tmdb.org/t/p/w500/9E2y5Q7WlCVNEhP5GiVTjhEhx1o.jpg',
+      backdrop_url: 'https://image.tmdb.org/t/p/w500/qVGpxnjrGlHaSTCqTQI6viBDSfp.jpg',
+    },
+  };
+
+  it('finds the poster where prod keeps it, not where the field is named', () => {
+    // Every Movie thing: image_url null, metadata.poster_url populated.
+    expect(normalizeCandidate(PROD_THING).image_url)
+      .toBe('https://image.tmdb.org/t/p/w500/9E2y5Q7WlCVNEhP5GiVTjhEhx1o.jpg');
+  });
+
+  it('prefers a top-level image_url when the endpoint supplies one', () => {
+    // The preview endpoint transforms items and does set it.
+    const transformed = { ...PROD_THING, image_url: 'https://cdn/transformed.jpg' };
+    expect(normalizeCandidate(transformed).image_url).toBe('https://cdn/transformed.jpg');
+  });
+
+  it('takes metadata.image as the last of the chain', () => {
+    expect(normalizeCandidate({ thing_id: 't', title: 'X', metadata: { image: 'https://cdn/i.jpg' } }).image_url)
+      .toBe('https://cdn/i.jpg');
+  });
+
+  it('reports null rather than guessing when there is no art', () => {
+    expect(normalizeCandidate({ thing_id: 't', title: 'X', metadata: { backdrop_url: 'https://cdn/b.jpg' } }).image_url)
+      .toBeNull();
   });
 });

@@ -205,7 +205,18 @@ export function normalizeCandidate(raw: unknown): Candidate | null {
     // `subtitle` is where /search-to-add puts artist/author/director.
     creator: firstString(src.creator, src.author, src.artist, src.subtitle),
     year: typeof year === 'number' || typeof year === 'string' ? year : null,
-    image_url: firstString(src.image_url, src.image),
+    // Art hides under several names, and the one this used to read is the one
+    // production leaves empty: every Movie thing has metadata.poster_url and a
+    // null top-level image_url (checked against prod, 2026-08-26 — 11,952 of
+    // 11,952). A fixture would have been written with whichever name its author
+    // picked and the tests would have passed either way.
+    image_url: firstString(
+      src.image_url,
+      isObject(src.metadata) ? src.metadata.poster_url : null,
+      isObject(src.metadata) ? src.metadata.image : null,
+      src.poster_url,
+      src.image,
+    ),
     score: typeof src.score === 'number' ? src.score : null,
     // /resolve returns graph neighbours, which are in the registry by
     // definition; only /search-to-add says so explicitly.
