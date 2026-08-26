@@ -191,6 +191,19 @@ correct match already sitting in their candidate lists. When a resolve goes wron
 `search_year` beside `raw_text`; if those two are identical the cleaner did nothing, which is the first
 thing to check.
 
+## Issuing tokens on a draft
+
+Minting the token pair and the invite *working* are different questions. A preview on a draft is worth
+having — reviewing the list before pitching is exactly when you want one — so `canIssueTokens` still
+allows it. But a draft cannot be claimed: `GET /pitches/invite/:token` answers
+`410 {"valid":false,"reason":"not_claimable_from_draft"}`, and the public signup page has no wording for
+that reason, so the target sees only *"That invite link isn't usable."* — its fallback copy.
+
+`inviteClaimBlockedReason()` mirrors the server so the panel says it first, on our screen instead of
+theirs. **Move the pitch to Pitched before sending the invite.** Only states verified against prod are
+named; an unrecognised status returns `null`, which means "nothing known against it", not "confirmed
+fine".
+
 ## What the preview link exposes
 
 `GET /pitches/preview/:token` is public and unauthenticated, and the link is forwardable, so its payload

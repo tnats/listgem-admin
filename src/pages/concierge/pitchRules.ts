@@ -170,6 +170,31 @@ export function tokenIssueBlockedReason(pitch: MaybePitch): string | null {
   return null;
 }
 
+/**
+ * Why the *invite* would be refused if the target clicked it now.
+ *
+ * Distinct from tokenIssueBlockedReason, which governs minting the pair. A
+ * preview is worth having on a draft — reviewing the list before pitching is
+ * exactly when you want one — but the same panel handed out an invite that the
+ * server answers with 410 not_claimable_from_draft, and the failure landed on
+ * the target's screen with copy the public site has no wording for.
+ *
+ * Only states verified against prod are named. A status this doesn't recognise
+ * returns null, which means "nothing known against it", not "confirmed fine".
+ */
+export function inviteClaimBlockedReason(pitch: MaybePitch): string | null {
+  if (!pitch) return null;
+  if (pitch.invite_used_at) return 'This invite has already been claimed — it cannot be used again.';
+  if (pitch.status === 'draft') {
+    return 'This pitch is still a draft, and a draft cannot be claimed — the server refuses the invite with '
+      + 'not_claimable_from_draft, which the signup page can only report as “that invite link isn\u2019t usable”. '
+      + 'Move it to Pitched before sending. The preview link works either way.';
+  }
+  if (pitch.status === 'declined') return 'Target declined — the invite is no longer active.';
+  if (pitch.status === 'archived') return 'Pitch is archived — takedown revoked both tokens.';
+  return null;
+}
+
 export function canIssueTokens(pitch: MaybePitch): boolean {
   return tokenIssueBlockedReason(pitch) === null;
 }

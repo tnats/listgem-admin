@@ -18,6 +18,7 @@ import {
   previewUrl,
   tokenIssueBlockedReason,
   typeMatchesPitch,
+  inviteClaimBlockedReason,
 } from './pitchRules';
 
 const pitch = (over = {}) => ({ status: 'draft', can_repitch: false, ...over });
@@ -207,5 +208,42 @@ describe('typeMatchesPitch (the claim-time landmine)', () => {
     // An unresolved row has no type to contradict; don't invent a problem.
     expect(typeMatchesPitch(null, 'Movie')).toBe(true);
     expect(typeMatchesPitch('Movie', undefined)).toBe(true);
+  });
+});
+
+describe('inviteClaimBlockedReason — what the server would say', () => {
+  const pitch = (over = {}) => ({ pitch_id: 'p1', status: 'pitched', invite_used_at: null, ...over });
+
+  it('refuses a draft, because the server does', () => {
+    // Verified against prod: GET /pitches/invite/:token on a draft returns
+    // 410 {"valid":false,"reason":"not_claimable_from_draft"}, and the signup
+    // page has no wording for it — the target sees only "isn't usable".
+    const why = inviteClaimBlockedReason(pitch({ status: 'draft' }));
+    expect(why).toMatch(/draft/i);
+    expect(why).toMatch(/Move it to Pitched/i);
+    // The preview is the reason issuing on a draft stays allowed.
+    expect(why).toMatch(/preview link works/i);
+  });
+
+  it('says nothing against a pitch that has been pitched', () => {
+    expect(inviteClaimBlockedReason(pitch())).toBeNull();
+    expect(inviteClaimBlockedReason(pitch({ status: 'accepted' }))).toBeNull();
+  });
+
+  it('refuses a claimed, declined or archived pitch', () => {
+    expect(inviteClaimBlockedReason(pitch({ invite_used_at: '2026-08-26T00:00:00Z' }))).toMatch(/already been claimed/i);
+    expect(inviteClaimBlockedReason(pitch({ status: 'declined' }))).toMatch(/no longer active/i);
+    expect(inviteClaimBlockedReason(pitch({ status: 'archived' }))).toMatch(/revoked/i);
+  });
+
+  it('does not claim a status is fine merely because it is unrecognised', () => {
+    // null means "nothing known against it" — the caller must not read it as
+    // a guarantee for a status we have never exercised.
+    expect(inviteClaimBlockedReason(pitch({ status: 'no_response' }))).toBeNull();
+    expect(inviteClaimBlockedReason(null)).toBeNull();
+  });
+
+  it('still lets a draft mint tokens, so the preview can be reviewed', () => {
+    expect(canIssueTokens(pitch({ status: 'draft' }))).toBe(true);
   });
 });
