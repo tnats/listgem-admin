@@ -18,6 +18,7 @@ import {
   dedupeAgainst,
   duplicateIndices,
   duplicateGroups,
+  matchConcern,
   summarize,
   toBatchPayload,
   toItemsPayload,
@@ -605,5 +606,103 @@ describe('duplicateGroups — which row is wrong is not ours to decide', () => {
 
   it('reports nothing when every row is its own film', () => {
     expect(duplicateGroups([row('a', 'movie_x', 'X'), row('b', 'movie_y', 'Y')])).toEqual([]);
+  });
+});
+
+describe('matchConcern — a match that agrees with nothing', () => {
+  // Rows must come from a real block paste, or queryFor falls back to the
+  // per-row cleaner and the comparison is made against a string production
+  // never sees — which would let a broken cleaner pass this suite.
+  const BLOCK = [
+    '1 It 2017 $719,766,009 [1][2]',
+    '7 Jaws 1975 $495,201,848 [13][14]',
+    '8 It Chapter Two 2019 $473,123,154 [15][16]',
+    '16 Hannibal 2001 $351,692,268 [31][32]',
+    '19 The Conjuring 2 2016 $322,811,702 [37][38]',
+    '20 The Conjuring 2013 $320,415,166 [39][40]',
+    '26 A Quiet Place Part II 2020 $297,372,261 [51][52]',
+    '27 Five Nights at Freddy\u2019s 2023 $297,144,130 [53][54]',
+    '30 The Silence of the Lambs 1991 $275,726,716 [59][60]',
+    '33 A Quiet Place: Day One 2024 $261,907,653 [65][66]',
+    '37 Us 2019 $256,071,218 [73][74]',
+    '5 Obsession \u2020 2026 $501,596,715 [9][10]',
+  ];
+  const built = rowsFromParsed(normalizeParsed(BLOCK));
+  const at = raw => built[BLOCK.indexOf(raw)];
+  const paste = raw => at(raw);
+  const matched = (raw, title, year) => ({
+    ...at(raw),
+    thing_id: 'movie_x',
+    status: 'resolved',
+    match: { title, type: 'Movie', year },
+  });
+
+  it('is comparing against the cleaned title, not the pasted line', () => {
+    expect(queryFor(at('16 Hannibal 2001 $351,692,268 [31][32]'))).toEqual({
+      title: 'Hannibal', year: 2001, header: false,
+    });
+  });
+
+  it('flags the one that went wrong in production', () => {
+    // The matcher offered The Silence of the Lambs as its only suggestion for
+    // Hannibal, so the operator picked the one thing on offer. Different name,
+    // ten years out — the row knew both.
+    const why = matchConcern(matched('16 Hannibal 2001 $351,692,268 [31][32]', 'The Silence of the Lambs', 1991));
+    expect(why).toMatch(/The Silence of the Lambs/);
+    expect(why).toMatch(/2001.*1991/);
+  });
+
+  it('accepts a year of drift between a table and the registry', () => {
+    // Real match from the same run: the table dates it 2020, the registry 2021.
+    expect(matchConcern(matched('26 A Quiet Place Part II 2020 $297,372,261 [51][52]', 'A Quiet Place Part II', 2021))).toBeNull();
+  });
+
+  it('accepts a sequel or a re-pointed title that still shares the name', () => {
+    expect(matchConcern(matched('19 The Conjuring 2 2016 $322,811,702 [37][38]', 'The Conjuring 2', 2016))).toBeNull();
+    expect(matchConcern(matched('8 It Chapter Two 2019 $473,123,154 [15][16]', 'It Chapter Two', 2019))).toBeNull();
+  });
+
+  it('says nothing about a row that has not resolved', () => {
+    expect(matchConcern(paste('16 Hannibal 2001 $351,692,268 [31][32]'))).toBeNull();
+  });
+
+  it('leaves the whole clean run clean', () => {
+    // Every resolved row from the 40-film build. One false positive here would
+    // be an amber warning on a correct match, which teaches operators to skip
+    // the warnings.
+    const clean = [
+      ['1 It 2017 $719,766,009 [1][2]', 'It', 2017],
+      ['7 Jaws 1975 $495,201,848 [13][14]', 'Jaws', 1975],
+      ['20 The Conjuring 2013 $320,415,166 [39][40]', 'The Conjuring', 2013],
+      ['27 Five Nights at Freddy’s 2023 $297,144,130 [53][54]', "Five Nights at Freddy's", 2023],
+      ['30 The Silence of the Lambs 1991 $275,726,716 [59][60]', 'The Silence of the Lambs', 1991],
+      ['33 A Quiet Place: Day One 2024 $261,907,653 [65][66]', 'A Quiet Place: Day One', 2024],
+      ['37 Us 2019 $256,071,218 [73][74]', 'Us', 2019],
+      ['5 Obsession † 2026 $501,596,715 [9][10]', 'Obsession', 2026],
+    ];
+    // "The Conjuring" is a substring of "The Conjuring 2": the pair has to stay
+    // clean in both directions, or a franchise flags itself.
+    expect(matchConcern(matched(BLOCK[5], 'The Conjuring', 2013))).toBeNull();
+    for (const [raw, title, year] of clean) {
+      expect(matchConcern(matched(raw, title, year)), raw).toBeNull();
+    }
+  });
+});
+
+describe('tableQueries — a table the operator re-sorted', () => {
+  it('still reads the ranks when the order is scrambled', () => {
+    // Sorted by year, so the rank column runs 30, 7, 1 — no less a rank column.
+    const q = tableQueries([
+      '30 The Silence of the Lambs 1991 $275,726,716 [59][60]',
+      '7 Jaws 1975 $495,201,848 [13][14]',
+      '1 It 2017 $719,766,009 [1][2]',
+    ]);
+    expect(q.map(r => r.title)).toEqual(['The Silence of the Lambs', 'Jaws', 'It']);
+  });
+
+  it('does not invent a rank column for number-titled films', () => {
+    // Descending, and no money or reference columns to corroborate.
+    expect(tableQueries(['300 Rise of an Empire', '28 Days Later', '12 Monkeys']).map(r => r.title))
+      .toEqual(['300 Rise of an Empire', '28 Days Later', '12 Monkeys']);
   });
 });

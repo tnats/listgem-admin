@@ -377,12 +377,12 @@ export interface RowQuery {
 export function tableQueries(rawTexts: string[]): RowQuery[] {
   const texts = (rawTexts || []).map(t => t || '');
 
-  // A rank column: most rows open with a bare integer and those integers climb.
-  // Ascending alone is too weak — 12 Angry Men, 28 Days Later, 300 climb by
-  // accident — so it also takes one of two corroborations: the numbers step by
-  // one, or the rest of the block is visibly tabular. The second matters,
-  // because an operator who deletes a few rows leaves gaps in the numbering
-  // and the sequence test alone would then hand the ranks to the matcher.
+  // A rank column: most rows open with a bare integer, corroborated either by
+  // the numbers stepping cleanly up or by the rest of the block being visibly
+  // tabular. Ascending alone is too weak — 12 Angry Men, 28 Days Later, 300
+  // climb by accident — and the sequence alone is too strict, since deleting a
+  // few rows leaves gaps and re-sorting the table scrambles the order outright.
+  // Money and reference columns are what a list of number-titled films lacks.
   const ranks = texts.map(t => {
     const m = t.match(RANK_CELL);
     return m ? Number(m[1]) : null;
@@ -394,8 +394,11 @@ export function tableQueries(rawTexts: string[]): RowQuery[] {
   const rankColumn =
     present.length >= 3 &&
     present.length >= texts.length * 0.6 &&
-    ascending &&
-    (steps >= (present.length - 1) * 0.8 || columnar >= texts.length * 0.6);
+    // Either corroboration is enough on its own. Ascending order is not
+    // required when the block is visibly tabular: an operator who re-sorts a
+    // table by year before copying scrambles the ranks, and they are no less
+    // ranks for it.
+    ((ascending && steps >= (present.length - 1) * 0.8) || columnar >= texts.length * 0.6);
 
   return texts.map((raw, i) => {
     // A heading only reads as one against the table it heads: every item row
@@ -572,6 +575,50 @@ export function dedupeAgainst(
     rows.push(row);
   }
   return { rows, skipped: incoming.length - rows.length };
+}
+
+/** Reduce a title to what a comparison should care about. */
+function compareKey(title: string): string {
+  return (title || '')
+    .toLowerCase()
+    .replace(/[\u2018\u2019']/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/**
+ * Whether a resolved row disagrees with the line it came from, and how.
+ *
+ * Advisory, never blocking — a legitimate match often shifts a year (a film
+ * dated 2020 by a box-office table and 2021 by the registry) and re-points a
+ * title. What it catches is the match that agrees with nothing: "Hannibal"
+ * (2001) resolved to "The Silence of the Lambs" (1991), which the matcher had
+ * offered as its only suggestion, so the operator picked the one thing on
+ * offer. Both signals were sitting in the row at the time.
+ */
+export function matchConcern(row: BuilderRow): string | null {
+  if (row.dropped || !row.thing_id || !row.match) return null;
+  const asked = queryFor(row);
+  const reasons: string[] = [];
+
+  const wanted = compareKey(asked.title);
+  const got = compareKey(row.match.title || '');
+  if (wanted && got && wanted !== got && !got.includes(wanted) && !wanted.includes(got)) {
+    // Sequels and re-releases share words with what was asked for; a match
+    // sharing none of them is a different work.
+    const words = new Set(wanted.split(' ').filter(w => w.length >= 3));
+    const shared = got.split(' ').some(w => w.length >= 3 && words.has(w));
+    if (!shared) reasons.push(`matched “${row.match.title}”`);
+  }
+
+  const gotYear = Number(row.match.year);
+  // One year of drift is ordinary between a table and a registry; a decade is
+  // a different film.
+  if (asked.year && Number.isFinite(gotYear) && Math.abs(asked.year - gotYear) > 1) {
+    reasons.push(`the line says ${asked.year}, the match is ${gotYear}`);
+  }
+
+  return reasons.length ? reasons.join('; ') : null;
 }
 
 /** Rows that landed on one thing, and what that thing is. */

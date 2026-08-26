@@ -165,6 +165,17 @@ naming only 31 would have had the operator delete the film and keep the mistake.
 wrong needs both rows in view, so the strip offers a jump to the first and a drop of the rest, and does
 not choose.
 
+### Matches worth a second look
+
+`matchConcern()` flags a resolved row whose match agrees with nothing on the line it came from: a title
+sharing no word of three letters or more, or a year more than one out. It blocks nothing — a real match
+often shifts a year between a box-office table and the registry — but it colours the cell amber and lists
+the row above the table.
+
+It exists because the matcher offered *The Silence of the Lambs* (1991) as its **only** suggestion for
+`Hannibal` (2001), and a single suggestion presented alone reads as the answer. Both disagreements were
+already in the row. Verified against every resolved row of the 40-film build: one flag, no false ones.
+
 ### Ambiguous vs unresolved
 
 A server `no_match` that ships suggestions is reported **ambiguous** — "not confident, you pick" — and
