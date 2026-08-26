@@ -574,21 +574,47 @@ export function dedupeAgainst(
   return { rows, skipped: incoming.length - rows.length };
 }
 
+/** Rows that landed on one thing, and what that thing is. */
+export interface DuplicateGroup {
+  thing_id: string;
+  title: string | null;
+  /** Every row in the group, in list order — not just the repeats. */
+  indices: number[];
+}
+
 /**
- * Kept rows that resolved to the same thing, beyond the first of each.
+ * Kept rows that resolved to the same thing.
  *
  * The text-level check can't see these: two different lines ("Alien" and
  * "Alien (1979)") resolving to one film is the same item twice on the list.
+ *
+ * Every row in the group is reported, not only the later ones, because the
+ * later row is not reliably the wrong one. A mis-picked candidate on row 17
+ * collided with the correct row 31, and naming only 31 pointed the operator
+ * at the good row: dropping it would have kept the mistake and deleted the
+ * film. Which row is wrong is a judgement about the match, so it belongs to
+ * whoever can see both.
  */
-export function duplicateIndices(rows: BuilderRow[]): number[] {
-  const first = new Map<string, number>();
-  const dupes: number[] = [];
+export function duplicateGroups(rows: BuilderRow[]): DuplicateGroup[] {
+  const byThing = new Map<string, number[]>();
   rows.forEach((row, i) => {
     if (row.dropped || !row.thing_id) return;
-    if (first.has(row.thing_id)) dupes.push(i);
-    else first.set(row.thing_id, i);
+    const at = byThing.get(row.thing_id);
+    if (at) at.push(i);
+    else byThing.set(row.thing_id, [i]);
   });
-  return dupes;
+  return [...byThing.entries()]
+    .filter(([, indices]) => indices.length > 1)
+    .map(([thing_id, indices]) => ({
+      thing_id,
+      title: rows[indices[0]].match?.title || null,
+      indices,
+    }));
+}
+
+/** The repeats alone — every row in a group but the first. */
+export function duplicateIndices(rows: BuilderRow[]): number[] {
+  return duplicateGroups(rows).flatMap(g => g.indices.slice(1));
 }
 
 /** Counts for the builder's summary strip. */

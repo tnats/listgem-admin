@@ -17,6 +17,7 @@ import {
   queryFor,
   dedupeAgainst,
   duplicateIndices,
+  duplicateGroups,
   summarize,
   toBatchPayload,
   toItemsPayload,
@@ -572,5 +573,37 @@ describe('duplicates', () => {
   it('ignores a dropped repeat', () => {
     const rows = [row('Alien', 'movie_alien_1979'), { ...row('Alien', 'movie_alien_1979'), dropped: true }];
     expect(duplicateIndices(rows)).toEqual([]);
+  });
+});
+
+describe('duplicateGroups — which row is wrong is not ours to decide', () => {
+  const row = (raw, thingId, title) => ({
+    raw_text: raw, thing_id: thingId, status: thingId ? 'resolved' : 'unresolved',
+    candidates: [], match: thingId ? { title, type: 'Movie', year: null } : null,
+    note: '', dropped: false, confidence: null, reason: null,
+  });
+
+  it('reports every row in the group and what they landed on', () => {
+    // Row 17 mis-picked and collided with row 31, the correct one. Reporting
+    // only 31 sent the operator to delete the right film.
+    const rows = [
+      row('16 Hannibal 2001', 'movie_the_silence_of_the_lambs_1991', 'The Silence of the Lambs'),
+      row('17 Alien: Romulus 2024', 'movie_alien_romulus_2024', 'Alien: Romulus'),
+      row('30 The Silence of the Lambs 1991', 'movie_the_silence_of_the_lambs_1991', 'The Silence of the Lambs'),
+    ];
+    expect(duplicateGroups(rows)).toEqual([
+      { thing_id: 'movie_the_silence_of_the_lambs_1991', title: 'The Silence of the Lambs', indices: [0, 2] },
+    ]);
+  });
+
+  it('still knows which are the repeats', () => {
+    const rows = [
+      row('a', 'movie_x', 'X'), row('b', 'movie_x', 'X'), row('c', 'movie_x', 'X'), row('d', 'movie_y', 'Y'),
+    ];
+    expect(duplicateIndices(rows)).toEqual([1, 2]);
+  });
+
+  it('reports nothing when every row is its own film', () => {
+    expect(duplicateGroups([row('a', 'movie_x', 'X'), row('b', 'movie_y', 'Y')])).toEqual([]);
   });
 });
