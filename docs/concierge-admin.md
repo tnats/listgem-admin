@@ -170,7 +170,10 @@ not choose.
 `matchConcern()` flags a resolved row whose match agrees with nothing on the line it came from: a title
 sharing no word of three letters or more, or a year more than two out. Two years is deliberately the same
 window the server's suggestion filter keeps (listgem-platform#564) — flagging inside it would only
-contradict a judgement the server has already made. It blocks nothing — a real match
+contradict a judgement the server has already made.
+
+The year rule is theirs exactly, both halves: **flagged only when both years are known and they disagree
+by more than two.** A line with no year, or a match with no year, says nothing — so this says nothing. It blocks nothing — a real match
 often shifts a year between a box-office table and the registry — but it colours the cell amber and lists
 the row above the table.
 

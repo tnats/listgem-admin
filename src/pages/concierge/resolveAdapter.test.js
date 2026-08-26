@@ -717,3 +717,34 @@ describe('tableQueries — a table the operator re-sorted', () => {
       .toEqual(['300 Rise of an Empire', '28 Days Later', '12 Monkeys']);
   });
 });
+
+describe('matchConcern — a missing year is not a disagreement', () => {
+  const BLOCK = [
+    '16 Hannibal 2001 $351,692,268 [31][32]',
+    '7 Jaws 1975 $495,201,848 [13][14]',
+    '1 It 2017 $719,766,009 [1][2]',
+  ];
+  const built = rowsFromParsed(normalizeParsed(BLOCK));
+  const withMatchYear = year => ({
+    ...built[0],
+    thing_id: 'movie_x',
+    status: 'resolved',
+    match: { title: 'Hannibal', type: 'Movie', year },
+  });
+
+  // The server keeps a suggestion when the year is supplied but the candidate
+  // has none (listgem-platform#563). Number(null) and Number('') are 0, and 0
+  // is finite, so the naive check called that a 2001-year disagreement.
+  it.each([null, undefined, '', 'unknown'])('says nothing when the match year is %p', year => {
+    expect(matchConcern(withMatchYear(year))).toBeNull();
+  });
+
+  it('says nothing when the line carried no year', () => {
+    const plain = rowsFromParsed(normalizeParsed(['Hannibal']))[0];
+    expect(matchConcern({ ...plain, thing_id: 'movie_x', status: 'resolved', match: { title: 'Hannibal', type: 'Movie', year: 1991 } })).toBeNull();
+  });
+
+  it('still speaks when both years are known and far apart', () => {
+    expect(matchConcern(withMatchYear(1991))).toMatch(/2001.*1991/);
+  });
+});
