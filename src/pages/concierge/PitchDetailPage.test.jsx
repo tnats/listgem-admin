@@ -251,3 +251,24 @@ describe('pitch detail — the guide rail', () => {
     expect(screen.queryByText(/^Next:/i)).toBeNull();
   });
 });
+
+describe('pitch detail — sending both links', () => {
+  const pitched = { ...BASE, status: 'pitched', preview_token: 'ptok', invite_token: 'itok' };
+  const rows = Array.from({ length: 40 }, (_, i) => ({ position: i, thing_id: `movie_${i}` }));
+
+  it('confirms the button that was actually pressed', async () => {
+    // Two copy buttons sharing one flag confirmed the wrong one.
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    serve(pitched, rows);
+    renderDetail();
+
+    await vi.waitFor(() => expect(screen.getByText(/Next: Send the invite/i)).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /^Copy preview link$/i }));
+
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: /^Copied$/i })).toBeTruthy());
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/pitch/ptok'));
+    // The invite button is untouched and still says what it does.
+    expect(screen.getByRole('button', { name: /^Copy invite link$/i })).toBeTruthy();
+  });
+});

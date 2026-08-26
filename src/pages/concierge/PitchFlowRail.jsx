@@ -35,7 +35,9 @@ function Crumb({ step, live }) {
  * down someone who does.
  */
 export default function PitchFlowRail({ pitch, items, confirmed, onTab, onStatus, onModal, busy }) {
-  const [copied, setCopied] = useState(false);
+  // Which button was copied, not merely that one was: the send step offers
+  // two, and a shared flag confirms the wrong one.
+  const [copied, setCopied] = useState(null);
   const steps = pitchFlow({
     pitch,
     items,
@@ -55,10 +57,10 @@ export default function PitchFlowRail({ pitch, items, confirmed, onTab, onStatus
     else if (action.kind === 'copy') {
       try {
         await navigator.clipboard.writeText(action.text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        setCopied(action.label);
+        setTimeout(() => setCopied(c => (c === action.label ? null : c)), 1500);
       } catch {
-        setCopied(false);
+        setCopied(null);
       }
     }
   }
@@ -83,12 +85,12 @@ export default function PitchFlowRail({ pitch, items, confirmed, onTab, onStatus
           </div>
           {live.extra && (
             <Button size="sm" disabled={busy} onClick={() => run(live.extra)}>
-              {live.extra.label}
+              {copied === live.extra.label ? 'Copied' : live.extra.label}
             </Button>
           )}
           {live.action && live.state !== 'waiting' && (
             <Button variant="primary" size="sm" disabled={busy} onClick={() => run(live.action)}>
-              {copied && live.action.kind === 'copy' ? 'Copied' : live.action.label}
+              {copied === live.action.label ? 'Copied' : live.action.label}
             </Button>
           )}
         </div>

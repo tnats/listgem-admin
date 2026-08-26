@@ -215,6 +215,24 @@ Three rules hold it together, and each exists because of a specific failure:
 Adding a step means adding it to `pitchFlow` and its test — not to a component. The resolver is pure for
 the same reason `pitchRules` is: the sequence gets pinned by tests instead of by clicking through prod.
 
+## Which link to send, and in what order
+
+**Preview first, then the invite.** They are not alternatives:
+
+| | Preview | Invite |
+|---|---|---|
+| Auth | none | signup completes the claim |
+| Shows | all items | the list's *title* only |
+| Forwardable | yes, by design | it is a capability — send to the target only |
+
+The invite page reads *"A list is waiting for you — create your account and **&lt;title&gt;** lands in it as
+a private draft."* It never shows the contents, so an invite sent on its own asks someone to create an
+account for a list they have not seen. The preview page deliberately does not offer a claim button
+either; it says to use the link in the message, because a forwardable token must not escalate into a
+capability.
+
+The rail's send step therefore offers both, preview first.
+
 ## Issuing tokens on a draft
 
 Minting the token pair and the invite *working* are different questions. A preview on a draft is worth

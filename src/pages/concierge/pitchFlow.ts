@@ -207,14 +207,20 @@ export function pitchFlow(
           ? claimBlocked
           : claimed
             ? 'Claimed.'
-            : 'Send the invite link to the target — nothing records the send, so this ticks when they claim.',
+            // Both links, in that order. The invite page names the list and
+            // shows none of it, so an invite sent alone asks someone to create
+            // an account for a list they have never seen.
+            : 'Send the preview first, then the invite — the invite page names the list but shows none of it. '
+              + 'Nothing records a send, so this ticks when they claim.',
       inviteExpired
         // Navigates rather than re-issuing here: re-issue kills any link
         // already sent, and the Outreach panel is where that is spelled out.
         ? { kind: 'tab', tab: 'outreach', label: 'Re-issue in Outreach' }
         : inviteHref
           ? { kind: 'copy', text: inviteHref, label: 'Copy invite link' }
-          : { kind: 'tab', tab: 'outreach', label: 'Open outreach' }),
+          : { kind: 'tab', tab: 'outreach', label: 'Open outreach' },
+      // Offered beside it, because it is the half that should go first.
+      !inviteExpired && previewHref ? { kind: 'copy', text: previewHref, label: 'Copy preview link' } : null),
   );
 
   // 6. Theirs. `waiting` is claimed only where there is evidence the ball is

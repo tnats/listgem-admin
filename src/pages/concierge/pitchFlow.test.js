@@ -92,7 +92,15 @@ describe('pitchFlow — the gate that sent a dead invite', () => {
   });
 
   it('does not pretend to know a link was sent', () => {
-    expect(live({ ...built, status: 'pitched' }).detail).toMatch(/nothing records the send/i);
+    expect(live({ ...built, status: 'pitched' }).detail).toMatch(/nothing records a send/i);
+  });
+
+  it('offers the preview beside the invite, and says to send it first', () => {
+    // The invite page names the list and shows none of it, so an invite sent
+    // alone asks someone to create an account for a list they've never seen.
+    const step = live({ ...built, status: 'pitched' });
+    expect(step.extra).toEqual({ kind: 'copy', text: '/p', label: 'Copy preview link' });
+    expect(step.detail).toMatch(/preview first/i);
   });
 });
 
