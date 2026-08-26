@@ -27,6 +27,7 @@ import {
   dedupeAgainst,
   duplicateIndices,
   duplicateGroups,
+  matchConcern,
   pendingIndices,
   rowsFromItems,
   rowsFromParsed,
@@ -200,6 +201,11 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
   // Two rows pointing at one film. Distinct from the paste-time text check:
   // these arrive from resolution, so only the matched ids expose them.
   const dupeGroups = duplicateGroups(rows);
+  // Matches that agree with nothing on the line they came from. Advisory: a
+  // real match often shifts a year, so this informs rather than blocks.
+  const suspect = rows
+    .map((row, i) => ({ i, why: matchConcern(row) }))
+    .filter(({ why }) => why);
   const duplicates = duplicateIndices(rows);
   const savedCount = rowsFromItems(items).length;
   const focusedRow = rows[focus];
@@ -750,10 +756,11 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       header: 'Resolved to',
       render: row =>
         row.match?.title ? (
-          <span className="text-gray-700">
+          <span className={matchConcern(row) ? 'text-amber-700' : 'text-gray-700'}>
             {row.match.title}
             {row.match.year != null && <span className="ml-1 text-gray-400 tabular-nums">{row.match.year}</span>}
             {row.match.type && <span className="ml-1 text-gray-400">· {row.match.type}</span>}
+            {matchConcern(row) && <span className="ml-1" title={matchConcern(row)}>⚠</span>}
           </span>
         ) : row.thing_id ? (
           <code className="text-[11px] text-gray-500">{row.thing_id}</code>
@@ -855,6 +862,17 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
           Every item on a list must match the list's type — the database rejects a mismatch when the target
           claims the draft, so this would fail on them rather than on us. Re-match or drop{' '}
           {mismatched.length === 1 ? 'it' : 'them'} before saving.
+        </div>
+      )}
+
+      {suspect.length > 0 && (
+        <div className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+          <span className="font-medium">
+            Worth a look: row {suspect.map(sr => sr.i + 1).join(', ')}.
+          </span>{' '}
+          {suspect.map(sr => `Row ${sr.i + 1} — ${sr.why}`).join('. ')}. A match can legitimately re-date or
+          rename an item, so this blocks nothing — but a match that agrees with nothing on the line usually
+          means the matcher offered the closest thing it had rather than the right one.
         </div>
       )}
 
