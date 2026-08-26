@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { currentStep, pitchFlow } from './pitchFlow';
+import { currentStep, itemCounts, pitchFlow } from './pitchFlow';
 
 const base = {
   pitch_id: 'p1',
@@ -156,5 +156,40 @@ describe('pitchFlow — pitches that have ended', () => {
 
   it('says declined is terminal rather than offering a re-pitch', () => {
     expect(flow({ status: 'declined' })[0].detail).toMatch(/terminal/i);
+  });
+});
+
+describe('itemCounts — the rows are the truth when we have them', () => {
+  const rows = [
+    { position: 0, thing_id: 'movie_it_2017' },
+    { position: 1, thing_id: 'movie_jaws_1975' },
+    { position: 2, thing_id: null },
+  ];
+
+  it('counts the rows the detail endpoint returned, not the aggregates it omits', () => {
+    // GET /pitches/:id returns items but no item_count/resolved_count, so the
+    // rail reported "nothing saved yet" about a finished forty-item list.
+    expect(itemCounts({ ...base }, rows)).toEqual({ items: 3, resolved: 2 });
+  });
+
+  it('accepts either signal for a resolved row', () => {
+    expect(itemCounts({ ...base }, [{ resolved: true }, { thing_id: 'x' }, {}])).toEqual({ items: 3, resolved: 2 });
+  });
+
+  it('falls back to the aggregates for a board row, which has no array', () => {
+    expect(itemCounts({ ...base, item_count: 40, resolved_count: 37 })).toEqual({ items: 40, resolved: 37 });
+  });
+
+  it('reads an empty array as an empty list, not as missing data', () => {
+    expect(itemCounts({ ...base, item_count: 40, resolved_count: 40 }, [])).toEqual({ items: 0, resolved: 0 });
+  });
+
+  it('drives the rail past the build step on the pitch that was stuck', () => {
+    const steps = pitchFlow({
+      pitch: { ...base, status: 'draft', preview_token: 'p', invite_token: 'i' },
+      items: Array.from({ length: 40 }, (_, i) => ({ position: i, thing_id: `movie_${i}` })),
+    });
+    expect(steps.find(s => s.id === 'build').state).toBe('done');
+    expect(currentStep(steps).label).toMatch(/Mark as pitched/i);
   });
 });

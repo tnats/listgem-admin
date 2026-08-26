@@ -60,6 +60,15 @@ export interface FlowStep {
 
 export interface FlowInput {
   pitch: MaybePitch;
+  /**
+   * The item rows from GET /pitches/:id, when the caller has them.
+   *
+   * Preferred over the pitch's own counts, which that endpoint does not
+   * aggregate — reading them there reported "nothing saved yet" for a pitch
+   * holding forty saved items. A board row has the counts and no array; this
+   * page has the array. Both are server truth.
+   */
+  items?: unknown;
   /** The identity record from the verification surface, if one exists. */
   confirmed?: { user_id?: string | null } | null;
   /** Built by the caller from the token — the resolver stays URL-free. */
@@ -86,6 +95,26 @@ function step(
 }
 
 /**
+ * How many items a pitch holds, and how many resolved.
+ *
+ * The array wins when there is one: GET /pitches/:id returns the rows but not
+ * the aggregates, so trusting the aggregates there said "nothing saved yet"
+ * about a finished forty-item list.
+ */
+export function itemCounts(pitch: MaybePitch, itemRows?: unknown): { items: number; resolved: number } {
+  if (Array.isArray(itemRows)) {
+    const rows = itemRows.filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null);
+    return {
+      items: rows.length,
+      // An item is resolved when it points at a thing. Some surfaces also say
+      // so outright; either is enough.
+      resolved: rows.filter(r => !!r.thing_id || r.resolved === true).length,
+    };
+  }
+  return { items: pitch?.item_count ?? 0, resolved: pitch?.resolved_count ?? 0 };
+}
+
+/**
  * The ordered steps, with exactly one of them live.
  *
  * "Live" is `current` when it's the operator's move, `blocked` when something
@@ -93,13 +122,14 @@ function step(
  * one matters, because a waiting step with no button used to read as a missing
  * feature and send people hunting.
  */
-export function pitchFlow({ pitch, confirmed, previewHref, inviteHref, now = Date.now() }: FlowInput): FlowStep[] {
+export function pitchFlow(
+  { pitch, items: itemRows, confirmed, previewHref, inviteHref, now = Date.now() }: FlowInput,
+): FlowStep[] {
   if (!pitch) return [];
   const p = pitch as Pitch;
   const ended = ENDED[p.status];
 
-  const items = p.item_count ?? 0;
-  const resolved = p.resolved_count ?? 0;
+  const { items, resolved } = itemCounts(p, itemRows);
   const listReady = items > 0 && resolved === items;
   const hasTokens = !!p.preview_token && !!p.invite_token;
   const claimed = !!p.invite_used_at;

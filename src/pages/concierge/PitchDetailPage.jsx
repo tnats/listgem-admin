@@ -18,6 +18,7 @@ import { mockPitchDetail } from './mockPitches';
 import PitchBuilder from './PitchBuilder';
 import TokensPanel from './TokensPanel';
 import PitchFlowRail from './PitchFlowRail';
+import { itemCounts } from './pitchFlow';
 import ConfirmIdentityModal from './ConfirmIdentityModal';
 import TakedownModal from './TakedownModal';
 import EditDetailsModal from './EditDetailsModal';
@@ -83,6 +84,9 @@ export default function PitchDetailPage() {
 
   const { pitch, items, events } = data;
   const transitions = offeredTransitions(pitch);
+  // This endpoint returns the rows but not the aggregates, so the header read
+  // 0/0 on a finished list.
+  const counts = itemCounts(pitch, items);
 
   async function move(next) {
     setNote(null);
@@ -123,7 +127,7 @@ export default function PitchDetailPage() {
             <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{pitch.thing_type}</span>
           )}
           <span className="text-xs tabular-nums text-gray-500">
-            {pitch.resolved_count ?? 0}/{pitch.item_count ?? 0} resolved
+            {counts.resolved}/{counts.items} resolved
           </span>
           {pitch.status === 'declined' && (
             <span className="text-xs text-gray-500">Declined is terminal — archive only, never re-pitch.</span>
@@ -182,6 +186,7 @@ export default function PitchDetailPage() {
 
       <PitchFlowRail
         pitch={pitch}
+        items={items}
         confirmed={confirmed}
         busy={setStatus.isPending}
         onTab={setTab}

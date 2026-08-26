@@ -216,14 +216,13 @@ describe('pitch detail — the guide rail', () => {
   it('names the next move and performs it, on the pitch that shipped a dead invite', async () => {
     // Draft, list saved, tokens minted: the exact state in which an invite was
     // sent and the target's screen reported the refusal.
-    serve({
-      ...BASE,
-      status: 'draft',
-      item_count: 40,
-      resolved_count: 40,
-      preview_token: 'ptok',
-      invite_token: 'itok',
-    });
+    serve(
+      { ...BASE, status: 'draft', preview_token: 'ptok', invite_token: 'itok' },
+      // The rows themselves, because the detail endpoint returns those and not
+      // the aggregates — serving a count with an empty array was a state the
+      // server never produces.
+      Array.from({ length: 40 }, (_, i) => ({ position: i, thing_id: `movie_${i}`, raw_text: `row ${i}` })),
+    );
     client.post.mockResolvedValue({ data: { success: true } });
     renderDetail();
 
