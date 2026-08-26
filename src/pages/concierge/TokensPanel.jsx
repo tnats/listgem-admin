@@ -2,7 +2,14 @@ import { useState } from 'react';
 import { Button } from '../../components/Form';
 import { usePitchMutations } from '../../api/hooks';
 import { apiErrorMessage } from '../../api/errors';
-import { canIssueTokens, inviteUrl, isExpired, previewUrl, tokenIssueBlockedReason } from './pitchRules';
+import {
+  canIssueTokens,
+  inviteClaimBlockedReason,
+  inviteUrl,
+  isExpired,
+  previewUrl,
+  tokenIssueBlockedReason,
+} from './pitchRules';
 
 function CopyRow({ label, url, hint }) {
   const [copied, setCopied] = useState(false);
@@ -50,6 +57,9 @@ export default function TokensPanel({ pitch }) {
   const [issued, setIssued] = useState(null);
 
   const blocked = tokenIssueBlockedReason(pitch);
+  // Minting the pair and the invite working are different questions, and the
+  // panel used to answer only the first.
+  const claimBlocked = inviteClaimBlockedReason(pitch);
   const invite = issued?.invite_token || pitch.invite_token;
   const preview = issued?.preview_token || pitch.preview_token;
   const expiresAt = issued?.invite_expires_at || pitch.invite_expires_at;
@@ -112,10 +122,19 @@ export default function TokensPanel({ pitch }) {
 
         <div className="space-y-2">
           <CopyRow label="Preview" url={previewUrl(preview)} hint="Read-only page for the target. Public, no auth." />
+          {claimBlocked && invite && (
+            <div className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-800">
+              <span className="font-medium">Don&rsquo;t send the invite yet.</span> {claimBlocked}
+            </div>
+          )}
           <CopyRow
             label="Invite"
             url={inviteUrl(invite)}
-            hint="Anyone holding this can claim the draft — send it to the target only."
+            hint={
+              claimBlocked
+                ? 'Would be refused right now — see above.'
+                : 'Anyone holding this can claim the draft — send it to the target only.'
+            }
           />
           {!preview && !invite && (
             <div className="rounded border border-dashed border-gray-200 p-4 text-center text-xs text-gray-400">
