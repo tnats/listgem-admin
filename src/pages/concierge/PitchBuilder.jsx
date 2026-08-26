@@ -767,6 +767,7 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const noted = rows.reduce((a, r, i) => (!r.dropped && r.note?.trim() ? [...a, i] : a), []);
   const unresolvedIndices = rows.reduce((a, r, i) => (!r.dropped && r.status !== 'resolved' ? [...a, i] : a), []);
   const pending = pendingIndices(rows);
 
@@ -776,7 +777,17 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
       key: 'raw',
       header: 'Pasted text',
       render: row => (
-        <span className={row.dropped ? 'text-gray-400 line-through' : 'text-gray-800'}>{row.raw_text}</span>
+        <>
+          <span className={row.dropped ? 'text-gray-400 line-through' : 'text-gray-800'}>{row.raw_text}</span>
+          {/* Notes were visible only in the focused-row editor, so one written
+              weeks earlier on row 2 of 11 was invisible until it appeared on
+              the target's own list. The set has to be readable at a glance. */}
+          {row.note?.trim() && (
+            <span className="mt-0.5 block truncate text-[11px] italic text-indigo-700" title={row.note}>
+              “{row.note.trim()}” — they see this
+            </span>
+          )}
+        </>
       ),
     },
     {
@@ -953,6 +964,11 @@ export default function PitchBuilder({ pitchId, thingType, items, readOnly, read
         )}
         {duplicates.length > 0 && (
           <span className="font-medium text-amber-600 tabular-nums">{duplicates.length} duplicate</span>
+        )}
+        {noted.length > 0 && (
+          <span className="tabular-nums text-indigo-700" title={`Row ${noted.map(i => i + 1).join(', ')} carry a note copied onto their list`}>
+            {noted.length} with a note they see
+          </span>
         )}
         <button
           onClick={async () => {
