@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:contract": "node scripts/contract-check.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.95.2",

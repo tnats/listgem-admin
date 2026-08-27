@@ -383,6 +383,31 @@ and edit mark these as target-visible, because nothing else in the form said so:
 `raw_text` staying in the payload is worth knowing when pasting from a table — the page renders resolved
 titles, but the pasted line (box-office columns, reference marks and all) is in the response behind it.
 
+## The contract probe
+
+`npm run check:contract` asks production whether it still returns the fields this portal reads. It is
+read-only apart from one scratch pitch, taken down in a `finally` block.
+
+It exists because **every expensive bug on this surface has been a contract failure, not a logic
+failure**, and the unit suite was green through all of them — a fixture carries whichever field name its
+author picked, so it agrees with the code under test whether or not that code matches production:
+
+| What broke | Why the suite missed it |
+|---|---|
+| art read from `image_url`, null on all 11,952 Movies | fixture written from the same assumption |
+| the rail reading `item_count` this endpoint omits | fixture supplied a field the API doesn't send |
+| signup reading `skipped[].raw_text` | hand-written type agreed with its author |
+| preview falling back to a removed `raw_text` | the breaking change was in another repo |
+
+That last row is the case nothing else covers: no CI here runs when the API or the website deploys. Worth
+running on a schedule for that reason, not only before a deploy.
+
+What it cannot catch: a field labelled "internal" that isn't, or a stale tab serving old guards. Those
+needed judgement about meaning rather than shape.
+
+Needs a credential — `ADMIN_TOKEN` in the environment, or `~/.listgem_admin_cred`. It refuses to run on
+an expired token rather than reporting failures that are really an auth bounce.
+
 ## Verifying against prod
 
 Prod is the only environment, and this feature writes **real people's contact details**. Anything created
