@@ -296,7 +296,7 @@ describe('pitch detail — a confirmed identity survives a reload', () => {
     serveWith(provisioned, { verified: { type: 'individual', proof: null, since: '2026-08-26T19:05:00Z' }, history: [] });
     renderDetail();
 
-    fireEvent.click(await screen.findByRole('button', { name: /identity/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Identity' }));
     await vi.waitFor(() => expect(screen.getByText(/Identity confirmed for usr_7/i)).toBeTruthy());
   });
 
@@ -304,7 +304,7 @@ describe('pitch detail — a confirmed identity survives a reload', () => {
     serveWith(provisioned, { verified: null, history: [] });
     renderDetail();
 
-    fireEvent.click(await screen.findByRole('button', { name: /identity/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Identity' }));
     await vi.waitFor(() => expect(screen.getByRole('button', { name: /confirm identity/i })).toBeTruthy());
     expect(screen.queryByText(/Identity confirmed for/i)).toBeNull();
   });
