@@ -253,7 +253,21 @@ export function normalizeSearchResults(data: unknown): Candidate[] {
     : isObject(data) && Array.isArray(data.results)
       ? data.results
       : [];
-  return list.map(normalizeCandidate).filter((c): c is Candidate => c !== null);
+  const seen = new Set<string>();
+  return list
+    .map(normalizeCandidate)
+    .filter((c): c is Candidate => c !== null)
+    // One entity, one row. /search-to-add returns the same thing_id twice for
+    // some queries — searching "Hannibal" listed movie_hannibal_2001_6a2bb8c1
+    // in the first two slots. Two identical rows in a list you are choosing
+    // from reads as two different films, and it spends a slot in a capped
+    // result set. Federated hits carry no thing_id and are left alone.
+    .filter(c => {
+      if (!c.thing_id) return true;
+      if (seen.has(c.thing_id)) return false;
+      seen.add(c.thing_id);
+      return true;
+    });
 }
 
 /**
