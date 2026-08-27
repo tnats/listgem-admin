@@ -201,3 +201,43 @@ describe('itemCounts — the rows are the truth when we have them', () => {
     expect(currentStep(steps).label).toMatch(/Mark as pitched/i);
   });
 });
+
+describe('pitchFlow — a claimed pitch is not still being built', () => {
+  const claimed = {
+    status: 'provisioned',
+    item_count: 4, resolved_count: 2,
+    preview_token: 'p', invite_token: 'i',
+    invite_used_at: '2026-08-27T14:10:00Z',
+  };
+
+  it('stops asking for a list the API will not accept edits to', () => {
+    // It read "Next: Build the list — 2 of 4 rows still unresolved" with a
+    // "Finish the list" button, directly above the panel saying the item set
+    // is theirs now and edits are rejected.
+    const steps = flow(claimed);
+    const build = steps.find(s => s.id === 'build');
+    expect(build.state).toBe('done');
+    expect(build.detail).toMatch(/2 of 4 item\(s\) resolved/);
+    expect(build.detail).toMatch(/theirs now/i);
+  });
+
+  it('moves on to the step that is actually available', () => {
+    const step = live(claimed);
+    expect(step.label).toMatch(/Confirm identity/i);
+    // Sends you to the tab rather than opening the modal: the claim timestamp
+    // and provisioned account are there, and a badge should not be granted
+    // without them. It also keeps one "Confirm identity" button per screen.
+    expect(step.action).toEqual({ kind: 'tab', tab: 'identity', label: 'Open Identity' });
+  });
+
+  it('offers viewing rather than finishing', () => {
+    expect(flow(claimed).find(s => s.id === 'build').action)
+      .toEqual({ kind: 'tab', tab: 'build', label: 'View the list' });
+  });
+
+  it('still holds an editable pitch at the build step', () => {
+    // The guard is about editability, not about unresolved rows.
+    const open = { ...claimed, status: 'pitched', invite_used_at: null };
+    expect(live(open).label).toMatch(/Build the list/i);
+  });
+});

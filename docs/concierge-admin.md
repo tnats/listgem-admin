@@ -198,6 +198,15 @@ send, they claim, confirm identity — each `done` / `current` / `blocked` / `wa
 from server state only. `PitchFlowRail` renders it above the tabs and leaves them alone: it helps someone
 who doesn't know the sequence without slowing down someone who does.
 
+A claimed pitch is not still being built. Once `canEditItems` is false the build step settles as done,
+whatever its unresolved count — otherwise the rail read *"Next: Build the list — 2 of 4 rows still
+unresolved"* with a **Finish the list** button, directly above the panel explaining that the item set is
+theirs and the API rejects edits.
+
+The identity step navigates to the tab rather than opening the modal, for the same reason re-issue does:
+the claim timestamp and the provisioned account are there, and a badge should not be granted without
+reading them. It also keeps one "Confirm identity" button per screen.
+
 Three rules hold it together, and each exists because of a specific failure:
 
 - **Exactly one step is live.** A rail that answers "what now" with two answers is not a rail. Pinned by

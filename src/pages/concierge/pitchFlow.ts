@@ -15,6 +15,7 @@
 
 import {
   canConfirmIdentity,
+  canEditItems,
   inviteClaimBlockedReason,
   isExpired,
   type MaybePitch,
@@ -155,19 +156,30 @@ export function pitchFlow(
 
   // 2. The list. `item_count`/`resolved_count` are the server's, so this tracks
   //    what is *saved*, never what happens to be on screen unsaved.
+  // Once the target has claimed it, the item set is theirs and the API rejects
+  // edits — so an unresolved row is no longer ours to finish. Left as `current`
+  // this told an operator to "Finish the list" directly above a panel saying
+  // they couldn't, and hid the step that actually was available.
+  const buildOver = !canEditItems(p);
   const buildDetail = items === 0
     ? 'Nothing saved yet — paste the source list and resolve it.'
     : `${items - resolved} of ${items} row(s) still unresolved.`;
   steps.push(
-    step('build', 'Build the list', listReady ? 'done' : 'current',
-      listReady ? `${items} item(s) saved.` : buildDetail,
-      { kind: 'tab', tab: 'build', label: items === 0 ? 'Open the builder' : 'Finish the list' }),
+    step('build', 'Build the list', listReady || buildOver ? 'done' : 'current',
+      buildOver
+        ? `${resolved} of ${items} item(s) resolved. The set is theirs now.`
+        : listReady
+          ? `${items} item(s) saved.`
+          : buildDetail,
+      buildOver
+        ? { kind: 'tab', tab: 'build', label: 'View the list' }
+        : { kind: 'tab', tab: 'build', label: items === 0 ? 'Open the builder' : 'Finish the list' }),
   );
 
   // 3. Links. Both are minted together; the preview is the reason this is
   //    allowed on a draft at all.
   steps.push(
-    step('links', 'Generate the links', hasTokens ? 'done' : listReady ? 'current' : 'todo',
+    step('links', 'Generate the links', hasTokens ? 'done' : listReady && !buildOver ? 'current' : 'todo',
       hasTokens ? 'Preview and invite links exist.' : 'Mints the preview and invite pair.',
       { kind: 'tab', tab: 'outreach', label: hasTokens ? 'Re-issue…' : 'Generate links' },
       hasTokens && previewHref ? { kind: 'link', href: previewHref, label: 'Open preview' } : null),
@@ -247,7 +259,11 @@ export function pitchFlow(
         : canConfirmIdentity(p)
           ? 'Needs evidence a human checked — the claim alone is not proof of identity.'
           : 'Available once the target has claimed and the draft is provisioned.',
-      { kind: 'modal', modal: 'identity', label: 'Confirm identity…' }),
+      // Navigates rather than opening the modal: the Identity tab carries the
+      // claim timestamp and the provisioned account, and the judgement this
+      // grants a badge on should be made after reading them. It also stops two
+      // identically-named buttons sitting on one screen.
+      { kind: 'tab', tab: 'identity', label: 'Open Identity' }),
   );
 
   return firstLiveOnly(steps);
