@@ -268,6 +268,21 @@ The thumbnail box is rendered whether or not there is an image. Hiding a failed 
 when a whole source can fail at once: a hotlink-blocked list would degrade into something that looks
 deliberately text-only, and nobody reports what they cannot see.
 
+## Stale tabs
+
+`UpdateBanner` compares the fingerprinted entry bundle this tab loaded against the one `/index.html` is
+serving now, on a five-minute timer and on window focus, and offers a reload when they differ. Dev has no
+fingerprint, so it does nothing there; an unreachable check says nothing and stays quiet, because nagging
+after a failed fetch teaches people to ignore the one message that matters.
+
+It exists because an operator worked across three deploys in one tab and hit a bug that had already been
+fixed: the item-note field still said **"internal"** in their build, they believed it, and the note
+reached a stranger's list. The guards are most of what this tool is, and a stale tab has the old ones
+while looking identical.
+
+Not a forced reload — the builder can hold unsaved rows. Drafts survive a reload now, so the cost of
+saying yes is low, but it stays the operator's call.
+
 ## The item note is not internal
 
 `PitchBuilder`'s per-row note is copied verbatim into `list_items.note` at provisioning and rendered on
