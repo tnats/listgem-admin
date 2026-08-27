@@ -7,8 +7,8 @@ import {
   normalizeParseOutcome,
   normalizeParsed,
   normalizeCandidate,
-  normalizeResolution,
   normalizeSearchResults,
+  normalizeResolution,
   pendingIndices,
   rowsFromItems,
   rowsFromParsed,
@@ -837,5 +837,43 @@ describe('candidate art — where production actually keeps it', () => {
   it('reports null rather than guessing when there is no art', () => {
     expect(normalizeCandidate({ thing_id: 't', title: 'X', metadata: { backdrop_url: 'https://cdn/b.jpg' } }).image_url)
       .toBeNull();
+  });
+});
+
+describe('search results — one entity, one row', () => {
+  it('drops a repeated thing_id', () => {
+    // /search-to-add returned movie_hannibal_2001_6a2bb8c1 in slots 1 and 2 of
+    // a real query. Two identical rows in a list you choose from read as two
+    // different films.
+    const results = normalizeSearchResults({
+      results: [
+        { thing_id: 'movie_hannibal_2001', title: 'Hannibal', type: 'Movie', year: 2001, in_registry: true },
+        { thing_id: 'movie_hannibal_2001', title: 'Hannibal', type: 'Movie', year: 2001, in_registry: true },
+        { thing_id: 'movie_hannibal_rising_2007', title: 'Hannibal Rising', type: 'Movie', year: 2007, in_registry: true },
+      ],
+    });
+    expect(results.map(r => r.thing_id)).toEqual(['movie_hannibal_2001', 'movie_hannibal_rising_2007']);
+  });
+
+  it('keeps the first occurrence, which is the one the server ranked highest', () => {
+    const results = normalizeSearchResults({
+      results: [
+        { thing_id: 't1', title: 'Best match', type: 'Movie', in_registry: true },
+        { thing_id: 't1', title: 'Same thing, later', type: 'Movie', in_registry: true },
+      ],
+    });
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toBe('Best match');
+  });
+
+  it('leaves federated hits alone, since they carry no id to compare', () => {
+    // Two TMDB rows can legitimately be different films with the same title.
+    const results = normalizeSearchResults({
+      results: [
+        { title: 'Hannibal', type: 'Movie', year: 1959, in_registry: false, source: 'tmdb', source_id: '169818' },
+        { title: 'Hannibal', type: 'Movie', year: 1972, in_registry: false, source: 'tmdb', source_id: '55555' },
+      ],
+    });
+    expect(results).toHaveLength(2);
   });
 });

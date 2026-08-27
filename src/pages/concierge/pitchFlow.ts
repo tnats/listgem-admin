@@ -162,7 +162,11 @@ export function pitchFlow(
   // they couldn't, and hid the step that actually was available.
   const buildOver = !canEditItems(p);
   const buildDetail = items === 0
-    ? 'Nothing saved yet — paste the source list and resolve it.'
+    // Covers both states: nothing pasted, and pasted-and-resolved but never
+    // saved. The rail reads the server's counts, so a screen full of resolved
+    // rows still shows zero here, and "paste the source list" alone was stale
+    // advice at exactly the moment Save was the missing step.
+    ? 'Nothing saved yet — paste the source list, resolve it, then Save items.'
     : `${items - resolved} of ${items} row(s) still unresolved.`;
   steps.push(
     step('build', 'Build the list', listReady || buildOver ? 'done' : 'current',
