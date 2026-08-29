@@ -77,6 +77,15 @@ const auth = { authorization: `Bearer ${token}`, 'content-type': 'application/js
 let pitchId = null;
 
 try {
+  // Prove the credential is admin before anything depends on it. A non-admin
+  // token authenticates fine and then fails every admin route, which reads as
+  // a wall of contract failures rather than one wrong account.
+  const whoami = await fetch(`${API}/pitches`, { headers: auth });
+  if (!check('the credential can reach admin routes', whoami.ok,
+    `GET /pitches returned ${whoami.status} — ${whoami.status === 403 ? 'authenticated but not an admin' : (await whoami.text()).slice(0, 120)}`)) {
+    throw new Error('credential is not usable for admin routes');
+  }
+
   // ---- The catalogue search that feeds candidate rows --------------------
   // The builder shows a poster per candidate. It reads image_url, then
   // metadata.poster_url, then metadata.image; if a response ever carries art
@@ -104,10 +113,12 @@ try {
       notes: 'Created by scripts/contract-check.mjs. Taken down in the same run.',
     }),
   });
-  const madeBody = await made.json();
-  if (!check('POST /pitches creates a pitch', made.status === 201 || made.ok, `status ${made.status}`)) {
+  const madeText = await made.text();
+  if (!check('POST /pitches creates a pitch', made.status === 201 || made.ok,
+    `status ${made.status} — ${madeText.slice(0, 200)}`)) {
     throw new Error('cannot continue without a scratch pitch');
   }
+  const madeBody = JSON.parse(madeText);
   pitchId = madeBody.pitch?.pitch_id;
 
   // ---- PUT items: the fields the builder sends ---------------------------
@@ -170,6 +181,8 @@ try {
   // The one probe row is unresolved, so nothing lands and nothing is sampled.
   check('invite counts what lands, not draft rows', invite.item_count === 0,
     `one unresolved row on the pitch; got item_count ${invite.item_count}`);
+} catch (err) {
+  failures.push(`run aborted — ${err.message}`);
 } finally {
   if (pitchId) {
     const down = await fetch(`${API}/pitches/${pitchId}/takedown`, {
