@@ -1,0 +1,25 @@
+name: CI
+
+# The suite exists; nothing was running it. 297 tests that only execute when
+# someone remembers are a suite you find out about during a release.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # jsdom is pinned to ^26 because 27 needs Node >= 20.19 for its
+          # CJS->ESM require chain; 20.x here keeps CI and dev on the same rules.
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

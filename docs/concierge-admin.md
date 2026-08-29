@@ -405,8 +405,16 @@ running on a schedule for that reason, not only before a deploy.
 What it cannot catch: a field labelled "internal" that isn't, or a stale tab serving old guards. Those
 needed judgement about meaning rather than shape.
 
-Needs a credential — `ADMIN_TOKEN` in the environment, or `~/.listgem_admin_cred`. It refuses to run on
-an expired token rather than reporting failures that are really an auth bounce.
+Needs a credential — `ADMIN_TOKEN`, or `ADMIN_EMAIL` + `ADMIN_PASSWORD`, or `~/.listgem_admin_cred`. It
+refuses to run on an expired token rather than reporting failures that are really an auth bounce.
+
+`.github/workflows/contract-check.yml` runs it every three hours and on manual dispatch, so a QA tester
+can get a verdict without a clone or a developer. It uses email + password rather than a token, because a
+JWT lasts 24 hours and a token in a repo secret would report a stale credential as a contract failure by
+the next morning. Needs `ADMIN_EMAIL` and `ADMIN_PASSWORD` repo secrets.
+
+Each run creates one scratch pitch and takes it down, so the cadence trades detection latency against
+archived rows left behind. Three hours is a guess, not a finding.
 
 ## Verifying against prod
 
