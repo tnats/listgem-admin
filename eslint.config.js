@@ -27,6 +27,16 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  // Node, not a browser: the e2e harness and the contract probe run outside the
+  // app. The react-hooks rule also misfires here — Playwright's fixtures take a
+  // callback named `use`, which is a parameter, not a hook.
+  {
+    files: ['e2e/**/*.js', 'scripts/**/*.mjs'],
+    languageOptions: { globals: globals.node },
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+    },
+  },
   // The pages stay plain JSX; .ts is for the modules carrying a real contract
   // (the concierge state machine and payload shapes). Without this block they
   // would silently stop being linted.
