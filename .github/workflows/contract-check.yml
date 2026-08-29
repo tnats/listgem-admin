@@ -1,0 +1,36 @@
+name: Contract check
+
+# Asks production whether it still returns the fields this portal reads.
+#
+# On a schedule rather than only at build time, because the failure this is
+# really for comes from *another repo*: when the API removed `raw_text` from
+# the preview payload — a correct change — the website rendered unresolved rows
+# as bare row numbers until its matching change merged. No CI in either repo
+# runs on the other's deploy, so nothing would have noticed.
+#
+# Also dispatchable, so a QA tester can get a verdict without a clone, a Node
+# install, or a developer.
+on:
+  schedule:
+    # Every three hours. Detection latency versus litter: each run creates one
+    # scratch pitch and takes it down, so a tighter cadence leaves more archived
+    # rows behind. Tune here if that trade changes.
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Probe production
+        # Email and password, not a token: a JWT lasts 24 hours, so a token in
+        # a secret would report a stale credential as a contract failure by the
+        # next morning. The script refuses to run on an expired one either way.
+        env:
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: node scripts/contract-check.mjs

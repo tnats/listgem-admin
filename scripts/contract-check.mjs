@@ -38,13 +38,29 @@ function check(name, condition, detail) {
   return false;
 }
 
+async function login(email, password) {
+  const res = await fetch(`${API}/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) throw new Error(`login ${res.status}`);
+  return (await res.json()).token;
+}
+
 async function credential() {
   if (process.env.ADMIN_TOKEN) return process.env.ADMIN_TOKEN;
+  // Scheduled runs use email + password, not a token: a JWT lasts 24 hours, so
+  // a token in a repo secret turns a monitor into something that reports a
+  // stale credential as a contract failure the morning after it is set.
+  if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
+    return login(process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD);
+  }
   let cred;
   try {
     cred = JSON.parse(readFileSync(`${process.env.HOME}/.listgem_admin_cred`, 'utf8'));
   } catch {
-    throw new Error('No credential: set ADMIN_TOKEN or write ~/.listgem_admin_cred');
+    throw new Error('No credential: set ADMIN_TOKEN, or ADMIN_EMAIL + ADMIN_PASSWORD, or write ~/.listgem_admin_cred');
   }
   if (cred.token) {
     const claims = JSON.parse(Buffer.from(cred.token.split('.')[1], 'base64url').toString());
@@ -53,13 +69,7 @@ async function credential() {
     }
     return cred.token;
   }
-  const res = await fetch(`${API}/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: cred.email, password: cred.password }),
-  });
-  if (!res.ok) throw new Error(`login ${res.status}`);
-  return (await res.json()).token;
+  return login(cred.email, cred.password);
 }
 
 const token = await credential();
