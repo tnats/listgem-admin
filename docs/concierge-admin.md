@@ -383,6 +383,17 @@ and edit mark these as target-visible, because nothing else in the form said so:
 `raw_text` staying in the payload is worth knowing when pasting from a table — the page renders resolved
 titles, but the pasted line (box-office columns, reference marks and all) is in the response behind it.
 
+## What each layer is for
+
+Recorded once for all three repos in
+[`CLAUDE-SHARED.md` → Verification](https://github.com/tnats/listgem-platform/blob/main/CLAUDE-SHARED.md#verification-what-each-layer-is-for):
+which layer a check belongs in, why manual checklists are not the primary defence, that QA and UAT are
+different jobs, and the cross-repo rule — **additive changes ship server-first, removals ship
+consumer-first**.
+
+Read it before adding a check here. The short version: if it can be an assertion, it belongs in the
+probe or an e2e spec rather than in a document someone reads.
+
 ## The contract probe
 
 `npm run check:contract` asks production whether it still returns the fields this portal reads. It is
